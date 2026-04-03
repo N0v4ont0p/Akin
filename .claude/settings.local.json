@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Read(//opt/homebrew/lib/node_modules/npm/bin/**)",
+      "Read(//opt/homebrew/Cellar/node/25.6.1_1/bin/**)",
+      "Bash(chmod +x \"/Volumes/George USB/code/claudecode/likewise/start-dev.sh\")",
+      "Bash(ln -sf \"/Volumes/George USB/code/claudecode/likewise\" /tmp/likewise)",
+      "Read(//tmp/**)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\")",
+      "Bash(npm install:*)",
+      "Read(//usr/local/lib/node_modules/npm/bin/**)",
+      "Read(//Users/georgehu/.nvm/versions/node/**)",
+      "Bash(/opt/homebrew/bin/npm install:*)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(ls /usr/local/bin/node*)",
+      "Read(//usr/bin/**)",
+      "Bash(export PATH=\"/opt/homebrew/bin:$PATH\")",
+      "Bash(npm --version)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(ls /Users/georgehu/Desktop/*.heic /Users/georgehu/Desktop/*.png /Users/georgehu/Desktop/*.jpg /Users/georgehu/Desktop/*.svg)",
+      "Bash(sips -s format png \"/Users/georgehu/Desktop/Screenshot 2026-04-02 at 10.35.27 PM.heic\" --out \"/tmp/akin-logo.png\")",
+      "Bash(xxd '/Users/georgehu/Desktop/Screenshot 2026-04-02 at 10.35.27 PM.heic')",
+      "Bash(python3 -c \":*)",
+      "Bash(node node_modules/.bin/next build)"
+    ]
+  }
+}

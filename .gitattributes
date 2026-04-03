@@ -1,0 +1,14 @@
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/lib filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/providers filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/public filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/next-env.d.ts filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/next.config.mjs filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/package-lock.json filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/start-dev.sh filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/components filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/node_modules filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/package.json filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/postcss.config.mjs filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/tsconfig.json filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/tsconfig.tsbuildinfo filter=lfs diff=lfs merge=lfs -text
+/Volumes/George[[:space:]]USB/code/claudecode/likewise/app filter=lfs diff=lfs merge=lfs -text
