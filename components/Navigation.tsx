@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-type Tab = "browse" | "matches";
+type Tab = "browse" | "matches" | "profile";
 
 interface NavigationProps {
   activeTab: Tab;
@@ -20,7 +20,7 @@ export default function Navigation({ activeTab, onTabChange, matchCount }: Navig
         left: 0,
         right: 0,
         zIndex: 100,
-        padding: "0 20px 24px",
+        padding: "0 20px 28px",
         display: "flex",
         justifyContent: "center",
       }}
@@ -28,22 +28,20 @@ export default function Navigation({ activeTab, onTabChange, matchCount }: Navig
       <div
         className="glass"
         style={{
-          borderRadius: "22px",
+          borderRadius: "24px",
           padding: "6px",
           display: "flex",
           gap: "4px",
           width: "100%",
-          maxWidth: "300px",
+          maxWidth: "340px",
         }}
       >
         <NavButton
           label="Browse"
           icon={
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           }
           isActive={activeTab === "browse"}
@@ -60,6 +58,18 @@ export default function Navigation({ activeTab, onTabChange, matchCount }: Navig
           isActive={activeTab === "matches"}
           onClick={() => onTabChange("matches")}
           badge={matchCount > 0 ? matchCount : null}
+        />
+        <NavButton
+          label="Profile"
+          icon={
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          }
+          isActive={activeTab === "profile"}
+          onClick={() => onTabChange("profile")}
+          badge={null}
         />
       </div>
     </div>
@@ -78,21 +88,21 @@ function NavButton({ label, icon, isActive, onClick, badge }: NavButtonProps) {
   return (
     <motion.button
       onClick={onClick}
-      whileTap={{ scale: 0.95 }}
+      whileTap={{ scale: 0.93 }}
       style={{
         flex: 1,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: "4px",
-        padding: "10px 12px",
-        borderRadius: "16px",
+        padding: "10px 8px",
+        borderRadius: "18px",
         border: "none",
-        background: isActive ? "rgba(155,109,255,0.15)" : "transparent",
-        color: isActive ? "var(--orchid)" : "rgba(255,255,255,0.35)",
+        background: "transparent",
+        color: isActive ? "var(--orchid)" : "rgba(255,255,255,0.32)",
         cursor: "pointer",
         position: "relative",
-        transition: "background 0.2s ease, color 0.2s ease",
+        transition: "color 0.2s ease",
         fontFamily: "inherit",
       }}
     >
@@ -102,18 +112,20 @@ function NavButton({ label, icon, isActive, onClick, badge }: NavButtonProps) {
           style={{
             position: "absolute",
             inset: 0,
-            borderRadius: "16px",
+            borderRadius: "18px",
             background: "rgba(155,109,255,0.12)",
             border: "1px solid rgba(155,109,255,0.22)",
           }}
-          transition={{ type: "spring", stiffness: 400, damping: 35 }}
+          transition={{ type: "spring", stiffness: 420, damping: 38 }}
         />
       )}
 
       <div style={{ position: "relative", zIndex: 1 }}>
         {icon}
         {badge !== null && (
-          <div
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
             className="pulse-dot"
             style={{
               position: "absolute",
@@ -132,15 +144,16 @@ function NavButton({ label, icon, isActive, onClick, badge }: NavButtonProps) {
             }}
           >
             {badge > 9 ? "9+" : badge}
-          </div>
+          </motion.div>
         )}
       </div>
 
       <span
         style={{
-          fontSize: "11px",
-          fontWeight: isActive ? "600" : "400",
-          letterSpacing: "0.03em",
+          fontSize: "10px",
+          fontWeight: isActive ? "700" : "400",
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
           position: "relative",
           zIndex: 1,
         }}

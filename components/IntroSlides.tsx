@@ -26,8 +26,8 @@ const SLIDES = [
 // ─── Slide 1: Pulsing privacy rings ──────────────────────────────────────────
 function RingsVisual() {
   return (
-    <div style={{ position: "relative", width: 280, height: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      {[280, 220, 160, 100].map((size, i) => (
+    <div style={{ position: "relative", width: 340, height: 340, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {[340, 270, 195, 118].map((size, i) => (
         <motion.div
           key={i}
           style={{
@@ -61,7 +61,7 @@ function RingsVisual() {
       <motion.div
         animate={{ rotate: 360 }}
         transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
-        style={{ position: "absolute", width: 160, height: 160 }}
+        style={{ position: "absolute", width: 195, height: 195 }}
       >
         <div style={{
           position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)",
@@ -109,31 +109,31 @@ function PersonAvatar({ gradient, delay = 0, size = 64 }: { gradient: string; de
 
 // ─── Slide 2: People grid ─────────────────────────────────────────────────────
 const PEOPLE = [
-  { x: 12,  y: 5,  g: 0,  delay: 0,    size: 58 },
-  { x: 42,  y: 0,  g: 2,  delay: 0.08, size: 64 },
-  { x: 73,  y: 8,  g: 4,  delay: 0.16, size: 56 },
-  { x: 5,   y: 48, g: 6,  delay: 0.12, size: 60 },
-  { x: 38,  y: 44, g: 8,  delay: 0.04, size: 66 },
-  { x: 70,  y: 50, g: 10, delay: 0.20, size: 58 },
+  { x: 10,  y: 4,  g: 0,  delay: 0,    size: 72 },
+  { x: 40,  y: 0,  g: 2,  delay: 0.08, size: 80 },
+  { x: 72,  y: 6,  g: 4,  delay: 0.16, size: 68 },
+  { x: 4,   y: 52, g: 6,  delay: 0.12, size: 74 },
+  { x: 37,  y: 48, g: 8,  delay: 0.04, size: 82 },
+  { x: 70,  y: 54, g: 10, delay: 0.20, size: 70 },
 ];
 
 function GridVisual() {
   return (
-    <div style={{ position: "relative", width: 300, height: 190 }}>
+    <div style={{ position: "relative", width: 360, height: 230 }}>
       {PEOPLE.map((p, i) => (
         <div key={i} style={{ position: "absolute", left: `${p.x}%`, top: `${p.y}%` }}>
           <PersonAvatar gradient={GRADIENTS[p.g]} delay={p.delay} size={p.size} />
         </div>
       ))}
       {/* Connecting lines SVG */}
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }} viewBox="0 0 300 190">
+      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", pointerEvents: "none" }} viewBox="0 0 360 230">
         {[
-          [53, 36, 150, 32],
-          [53, 36, 42, 119],
-          [150, 32, 244, 43],
-          [244, 43, 234, 130],
-          [42, 119, 234, 130],
-          [152, 109, 244, 43],
+          [62, 42, 180, 38],
+          [62, 42, 50, 142],
+          [180, 38, 294, 52],
+          [294, 52, 280, 155],
+          [50, 142, 280, 155],
+          [180, 130, 294, 52],
         ].map(([x1, y1, x2, y2], i) => (
           <motion.line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
             stroke="rgba(155,109,255,0.35)" strokeWidth="1.2" strokeDasharray="5 4"
@@ -150,93 +150,92 @@ function GridVisual() {
 // ─── Slide 3: Heart + Question mark ──────────────────────────────────────────
 function MergeVisual() {
   return (
-    <div style={{ position: "relative", width: 300, height: 180, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "relative", width: 360, height: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
       {/* Center glow */}
       <motion.div
-        animate={{ opacity: [0.2, 0.7, 0.2], scale: [0.85, 1.15, 0.85] }}
+        animate={{ opacity: [0.2, 0.8, 0.2], scale: [0.85, 1.2, 0.85] }}
         transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
         style={{
           position: "absolute",
-          width: 100, height: 100, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(0,229,160,0.45), rgba(155,109,255,0.3), transparent)",
-          filter: "blur(18px)",
+          width: 130, height: 130, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(0,229,160,0.5), rgba(155,109,255,0.35), transparent)",
+          filter: "blur(22px)",
         }}
       />
 
-      {/* Left: Heart (the one who likes) */}
+      {/* Left: Heart */}
       <motion.div
-        animate={{ x: [40, 14, 40] }}
-        transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+        animate={{ x: [50, 18, 50] }}
+        transition={{ repeat: Infinity, duration: 3.4, ease: "easeInOut" }}
         style={{
           position: "absolute", left: 14,
-          width: 88, height: 88, borderRadius: "50%",
+          width: 108, height: 108, borderRadius: "50%",
           background: "linear-gradient(135deg,#ff4f7b,#c084fc)",
-          boxShadow: "0 6px 28px rgba(255,79,123,0.45)",
+          boxShadow: "0 8px 36px rgba(255,79,123,0.5)",
           display: "flex", alignItems: "center", justifyContent: "center",
           zIndex: 2,
         }}
       >
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="white" stroke="none">
+        <svg width="50" height="50" viewBox="0 0 24 24" fill="white" stroke="none">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
       </motion.div>
 
-      {/* Right: Question mark (the unknown) */}
+      {/* Right: Question mark */}
       <motion.div
-        animate={{ x: [-40, -14, -40] }}
-        transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+        animate={{ x: [-50, -18, -50] }}
+        transition={{ repeat: Infinity, duration: 3.4, ease: "easeInOut" }}
         style={{
           position: "absolute", right: 14,
-          width: 88, height: 88, borderRadius: "50%",
+          width: 108, height: 108, borderRadius: "50%",
           background: "linear-gradient(135deg,#9b6dff,#4facfe)",
-          boxShadow: "0 6px 28px rgba(155,109,255,0.4)",
+          boxShadow: "0 8px 36px rgba(155,109,255,0.45)",
           display: "flex", alignItems: "center", justifyContent: "center",
           zIndex: 2,
         }}
       >
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="white" stroke="none">
-          <text x="12" y="18" textAnchor="middle" fontSize="22" fontWeight="700" fontFamily="Inter,system-ui,sans-serif" fill="white">?</text>
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" stroke="none">
+          <text x="12" y="18" textAnchor="middle" fontSize="22" fontWeight="800" fontFamily="Inter,system-ui,sans-serif" fill="white">?</text>
         </svg>
       </motion.div>
 
-      {/* Center spark when merged */}
+      {/* Center spark */}
       <motion.div
-        animate={{ opacity: [0, 1, 0], scale: [0.4, 1.2, 0.4] }}
-        transition={{ repeat: Infinity, duration: 3.2, delay: 1.4, ease: "easeInOut" }}
+        animate={{ opacity: [0, 1, 0], scale: [0.3, 1.4, 0.3] }}
+        transition={{ repeat: Infinity, duration: 3.4, delay: 1.5, ease: "easeInOut" }}
         style={{
           position: "absolute", zIndex: 3,
-          width: 32, height: 32,
-          borderRadius: "50%",
+          width: 40, height: 40, borderRadius: "50%",
           background: "linear-gradient(135deg,#00e5a0,#9b6dff)",
-          boxShadow: "0 0 24px rgba(0,229,160,0.8)",
+          boxShadow: "0 0 32px rgba(0,229,160,0.9)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
           <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
         </svg>
       </motion.div>
 
       {/* Labels */}
       <motion.p
-        animate={{ x: [40, 14, 40] }}
-        transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+        animate={{ x: [50, 18, 50] }}
+        transition={{ repeat: Infinity, duration: 3.4, ease: "easeInOut" }}
         style={{
-          position: "absolute", bottom: 4, left: 14,
-          width: 88, textAlign: "center",
-          fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)",
+          position: "absolute", bottom: 6, left: 14,
+          width: 108, textAlign: "center",
+          fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.55)",
           letterSpacing: "0.04em",
         }}
       >
         You
       </motion.p>
       <motion.p
-        animate={{ x: [-40, -14, -40] }}
-        transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+        animate={{ x: [-50, -18, -50] }}
+        transition={{ repeat: Infinity, duration: 3.4, ease: "easeInOut" }}
         style={{
-          position: "absolute", bottom: 4, right: 14,
-          width: 88, textAlign: "center",
-          fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)",
+          position: "absolute", bottom: 6, right: 14,
+          width: 108, textAlign: "center",
+          fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.55)",
           letterSpacing: "0.04em",
         }}
       >

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile, UserProfile, AkinPick, subscribeToAkinPick } from "@/lib/firestore";
+// updateUserProfile and leaveClass are called directly from components — no provider wrapper needed
 
 interface UserContextType {
   user: User | null;

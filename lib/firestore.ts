@@ -466,6 +466,20 @@ export function subscribeToAkinPick(
   });
 }
 
+// ─── Profile Updates ─────────────────────────────────────────────────────────
+
+export async function updateUserProfile(
+  userId: string,
+  name: string,
+  avatarGradient: number
+): Promise<void> {
+  await updateDoc(doc(db, "users", userId), { name: name.trim(), avatarGradient });
+}
+
+export async function leaveClass(userId: string): Promise<void> {
+  await updateDoc(doc(db, "users", userId), { classId: null, className: "" });
+}
+
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
 export function formatRelativeTime(timestamp: Timestamp | null): string {

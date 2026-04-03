@@ -10,6 +10,7 @@ import MatchesList from "@/components/MatchesList";
 import Navigation from "@/components/Navigation";
 import MatchReveal from "@/components/MatchReveal";
 import AkinSlot from "@/components/AkinSlot";
+import ProfileSheet from "@/components/ProfileSheet";
 import GradientAvatar from "@/components/GradientAvatar";
 import {
   getClass,
@@ -17,12 +18,14 @@ import {
   getUserLikes,
   setAkinPick,
   subscribeToMatches,
+  updateUserProfile,
+  leaveClass,
   ClassData,
   UserProfile,
   MatchData,
 } from "@/lib/firestore";
 
-type Tab = "browse" | "matches";
+type Tab = "browse" | "matches" | "profile";
 
 interface PendingMatch {
   matchGradient: number;
@@ -34,7 +37,7 @@ export default function ClassPage() {
   const params = useParams();
   const classId = params.classId as string;
   const router = useRouter();
-  const { user, profile, loading: userLoading, akinPick } = useUser();
+  const { user, profile, loading: userLoading, akinPick, setProfile } = useUser();
   const { privacyMode, toggle: togglePrivacy } = usePrivacyMode();
 
   const [classData, setClassData] = useState<ClassData | null>(null);
@@ -47,6 +50,7 @@ export default function ClassPage() {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [cooldownToast, setCooldownToast] = useState("");
+  const [showProfile, setShowProfile] = useState(false);
 
   const previousMatchIds = useRef<Set<string>>(new Set());
   const isFirstMatchLoad = useRef(true);
@@ -74,11 +78,9 @@ export default function ClassPage() {
     });
   }, [classId]);
 
-  // Load classmates + likes — fire as soon as user is ready, regardless of profile.classId race
+  // Load classmates + likes
   useEffect(() => {
     if (userLoading || !user) return;
-    // If profile loaded but for a different class, the auth guard above will redirect
-    // Still allow load here so classId from URL is the source of truth
     const load = async () => {
       try {
         const [mates, likedIdsList] = await Promise.all([
@@ -89,7 +91,7 @@ export default function ClassPage() {
         setLikedIds(new Set(likedIdsList));
       } catch (err) {
         console.error("Load error:", err);
-        setError("Failed to load class data. Check Firestore rules.");
+        setError("Failed to load class data.");
       }
       setPageLoading(false);
     };
@@ -120,7 +122,7 @@ export default function ClassPage() {
       }
     });
     return unsub;
-  }, [user, profile, classId]);
+  }, [user, classId]);
 
   const handleAkinPick = useCallback(async (classmate: UserProfile) => {
     if (!user || !profile) return;
@@ -146,6 +148,26 @@ export default function ClassPage() {
   }, [user, profile, classId]);
 
   const handlePass = useCallback((_classmate: UserProfile) => {}, []);
+
+  const handleUpdateProfile = useCallback(async (name: string, gradient: number) => {
+    if (!user || !profile) return;
+    await updateUserProfile(user.uid, name, gradient);
+    setProfile({ ...profile, name, avatarGradient: gradient });
+  }, [user, profile, setProfile]);
+
+  const handleLeaveClass = useCallback(async () => {
+    if (!user) return;
+    await leaveClass(user.uid);
+    window.location.href = "/setup";
+  }, [user]);
+
+  // Open profile sheet when profile tab is tapped
+  useEffect(() => {
+    if (activeTab === "profile") {
+      setShowProfile(true);
+      setActiveTab("browse");
+    }
+  }, [activeTab]);
 
   if (userLoading || pageLoading) {
     return (
@@ -173,7 +195,7 @@ export default function ClassPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", paddingBottom: "100px" }}>
+    <div style={{ minHeight: "100vh", paddingBottom: "110px" }}>
       {/* Header */}
       <div
         style={{
@@ -184,9 +206,9 @@ export default function ClassPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          background: privacyMode ? "rgba(245,245,240,0.9)" : "rgba(7,7,15,0.82)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
+          background: privacyMode ? "rgba(245,245,240,0.92)" : "rgba(7,7,15,0.85)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
           borderBottom: `1px solid ${privacyMode ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"}`,
         }}
       >
@@ -221,9 +243,9 @@ export default function ClassPage() {
           </div>
         </div>
 
-        {/* Right: privacy toggle + match badge + avatar */}
+        {/* Right: privacy + match badge + avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {/* Privacy mode toggle */}
+          {/* Privacy toggle */}
           <motion.button
             onClick={togglePrivacy}
             whileHover={{ scale: 1.08 }}
@@ -277,24 +299,28 @@ export default function ClassPage() {
                 fontFamily: "inherit",
               }}
             >
-              <div
-                className="pulse-dot"
-                style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--mint)" }}
-              />
+              <div className="pulse-dot" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--mint)" }} />
               <span style={{ fontSize: "12px", color: "var(--mint)", fontWeight: "700" }}>
                 {matches.length}
               </span>
             </motion.button>
           )}
 
-          {/* Profile avatar */}
+          {/* Profile avatar tap → open profile sheet */}
           {profile && !privacyMode && (
-            <GradientAvatar
-              gradient={profile.avatarGradient ?? 0}
-              name={profile.name}
-              size={32}
-              border="2px solid rgba(255,255,255,0.12)"
-            />
+            <motion.button
+              onClick={() => setShowProfile(true)}
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.93 }}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <GradientAvatar
+                gradient={profile.avatarGradient ?? 0}
+                name={profile.name}
+                size={32}
+                border="2px solid rgba(155,109,255,0.45)"
+              />
+            </motion.button>
           )}
         </div>
       </div>
@@ -310,10 +336,7 @@ export default function ClassPage() {
             transition={{ duration: 0.22 }}
           >
             <div style={{ padding: "20px 20px 0" }}>
-              {/* Akin Slot — only show in normal mode */}
-              {!privacyMode && (
-                <AkinSlot akinPick={akinPick} />
-              )}
+              {!privacyMode && <AkinSlot akinPick={akinPick} />}
             </div>
             <div style={{ paddingTop: "16px" }}>
               <CardStack
@@ -338,9 +361,9 @@ export default function ClassPage() {
             <div style={{ paddingTop: "24px" }}>
               <div style={{ padding: "0 20px 20px" }}>
                 <h2 style={{
-                  fontSize: "24px",
+                  fontSize: "26px",
                   fontWeight: "800",
-                  letterSpacing: "-0.02em",
+                  letterSpacing: "-0.025em",
                   marginBottom: "4px",
                   color: privacyMode ? "#1a1a1a" : "#f0f0f5",
                 }}>
@@ -348,7 +371,9 @@ export default function ClassPage() {
                 </h2>
                 {matches.length > 0 && (
                   <p style={{ color: privacyMode ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.35)", fontSize: "14px" }}>
-                    {privacyMode ? `${matches.length} item${matches.length !== 1 ? "s" : ""}` : `${matches.length} mutual connection${matches.length !== 1 ? "s" : ""}`}
+                    {privacyMode
+                      ? `${matches.length} item${matches.length !== 1 ? "s" : ""}`
+                      : `${matches.length} mutual connection${matches.length !== 1 ? "s" : ""}`}
                   </p>
                 )}
               </div>
@@ -358,7 +383,7 @@ export default function ClassPage() {
         )}
       </AnimatePresence>
 
-      {/* Bottom navigation */}
+      {/* Navigation */}
       <Navigation activeTab={activeTab} onTabChange={setActiveTab} matchCount={matches.length} />
 
       {/* Toasts */}
@@ -383,7 +408,7 @@ export default function ClassPage() {
             exit={{ opacity: 0, y: 8 }}
             style={{
               position: "fixed",
-              bottom: "90px",
+              bottom: "100px",
               left: "50%",
               transform: "translateX(-50%)",
               background: "rgba(155,109,255,0.12)",
@@ -419,6 +444,20 @@ export default function ClassPage() {
               setPendingMatch(null);
               setActiveTab("matches");
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Profile Sheet */}
+      <AnimatePresence>
+        {showProfile && profile && (
+          <ProfileSheet
+            profile={profile}
+            matchCount={matches.length}
+            classmateCount={classmates.length}
+            onClose={() => setShowProfile(false)}
+            onUpdateProfile={handleUpdateProfile}
+            onLeaveClass={handleLeaveClass}
           />
         )}
       </AnimatePresence>
