@@ -13,6 +13,7 @@ import {
   updateDoc,
   increment,
   deleteDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -84,6 +85,7 @@ export interface UserProfile {
   name: string;
   avatarGradient: number;
   gender?: "male" | "female" | "other";
+  accentColor?: "orchid" | "mint" | "gold";
   classId: string;
   className: string;
   schoolId: string;
@@ -208,13 +210,15 @@ export async function createUserProfile(
   email: string,
   photoURL: string,
   gender?: "male" | "female" | "other",
-  facts?: { comfortFood?: string; major?: string; campusVibe?: string; deepFact?: string }
+  facts?: { comfortFood?: string; major?: string; campusVibe?: string; deepFact?: string },
+  accentColor?: "orchid" | "mint" | "gold"
 ): Promise<void> {
   await setDoc(doc(db, "users", userId), {
     name: name.trim(),
     avatarGradient,
     ...(gender ? { gender } : {}),
     ...(facts ? { facts } : {}),
+    ...(accentColor ? { accentColor } : {}),
     classId,
     className,
     schoolId,
@@ -607,4 +611,28 @@ export function subscribeToVibeCheck(classId: string, callback: (check: VibeChec
     if (!snap.exists()) { callback(null); return; }
     callback({ id: snap.id, ...(snap.data() as Omit<VibeCheck, "id">) });
   });
+}
+
+// ─── User History (skip/pass persistence) ────────────────────────────────────
+
+export async function addToUserHistory(
+  userId: string,
+  classId: string,
+  skippedUserId: string
+): Promise<void> {
+  const docId = `${userId}_${classId}`;
+  const ref = doc(db, "user_history", docId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, { skippedIds: arrayUnion(skippedUserId) });
+  } else {
+    await setDoc(ref, { userId, classId, skippedIds: [skippedUserId] });
+  }
+}
+
+export async function getUserHistory(userId: string, classId: string): Promise<string[]> {
+  const docId = `${userId}_${classId}`;
+  const snap = await getDoc(doc(db, "user_history", docId));
+  if (!snap.exists()) return [];
+  return (snap.data().skippedIds ?? []) as string[];
 }

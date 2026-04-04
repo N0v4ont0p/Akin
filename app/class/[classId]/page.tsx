@@ -18,6 +18,8 @@ import {
   getClass,
   getClassmates,
   getUserLikes,
+  addToUserHistory,
+  getUserHistory,
   setAkinPick,
   subscribeToMatches,
   updateUserProfile,
@@ -98,12 +100,13 @@ export default function ClassPage() {
     if (userLoading || !user) return;
     const load = async () => {
       try {
-        const [mates, likedIdsList] = await Promise.all([
+        const [mates, likedIdsList, historyIds] = await Promise.all([
           getClassmates(classId, user.uid),
           getUserLikes(user.uid, classId),
+          getUserHistory(user.uid, classId),
         ]);
         setClassmates(mates);
-        setLikedIds(new Set(likedIdsList));
+        setLikedIds(new Set([...likedIdsList, ...historyIds]));
       } catch (err) {
         console.error("Load error:", err);
         setError("Failed to load class data.");
@@ -230,7 +233,11 @@ export default function ClassPage() {
     }
   }, [user, profile, classId]);
 
-  const handlePass = useCallback((_classmate: UserProfile) => {}, []);
+  const handlePass = useCallback((classmate: UserProfile) => {
+    if (!user) return;
+    setLikedIds(prev => { const next = new Set(prev); next.add(classmate.userId); return next; });
+    addToUserHistory(user.uid, classId, classmate.userId).catch(console.error);
+  }, [user, classId]);
 
   const handleOpenSyncModal = useCallback((match?: MatchData) => {
     // If no specific match passed, use the akinPick match if found

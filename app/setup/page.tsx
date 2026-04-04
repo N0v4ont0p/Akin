@@ -38,6 +38,8 @@ export default function SetupPage() {
     const gender = storedGender ?? undefined;
     const storedFacts = sessionStorage.getItem("onboarding_facts");
     const facts = storedFacts ? JSON.parse(storedFacts) as { comfortFood?: string; major?: string; campusVibe?: string; deepFact?: string } : undefined;
+    const storedAccent = sessionStorage.getItem("onboarding_accent") as "orchid" | "mint" | "gold" | null;
+    const accentColor = storedAccent ?? undefined;
 
     setSubmitting(true);
     setError("");
@@ -54,7 +56,8 @@ export default function SetupPage() {
         user.email ?? "",
         user.photoURL ?? "",
         gender,
-        facts
+        facts,
+        accentColor
       );
 
       // Clean up session storage
@@ -62,6 +65,7 @@ export default function SetupPage() {
       sessionStorage.removeItem("onboarding_gradient");
       sessionStorage.removeItem("onboarding_gender");
       sessionStorage.removeItem("onboarding_facts");
+      sessionStorage.removeItem("onboarding_accent");
 
       // Hard navigate so the page reloads with fresh profile state
       window.location.href = `/class/${classData.classId}`;

@@ -7,10 +7,40 @@ import { useUser } from "@/providers/UserProvider";
 import GradientAvatar from "@/components/GradientAvatar";
 import { GRADIENTS } from "@/lib/firestore";
 
-type Step = "name" | "gender" | "colour" | "facts" | "features";
+type Step = "identity" | "vibe" | "fragments" | "commitment";
 type Gender = "male" | "female" | "other";
 
-const STEPS: Step[] = ["name", "gender", "colour", "facts", "features"];
+const STEPS: Step[] = ["identity", "vibe", "fragments", "commitment"];
+
+const ACCENT_COLORS = [
+  {
+    id: "orchid" as const,
+    label: "Radiant Orchid",
+    color: "#9b6dff",
+    glow: "rgba(155,109,255,0.4)",
+    bg: "rgba(155,109,255,0.12)",
+    border: "rgba(155,109,255,0.4)",
+    emoji: "✦",
+  },
+  {
+    id: "mint" as const,
+    label: "Electric Mint",
+    color: "#00e5a0",
+    glow: "rgba(0,229,160,0.4)",
+    bg: "rgba(0,229,160,0.10)",
+    border: "rgba(0,229,160,0.35)",
+    emoji: "⚡",
+  },
+  {
+    id: "gold" as const,
+    label: "Deep Gold",
+    color: "#fee140",
+    glow: "rgba(254,225,64,0.35)",
+    bg: "rgba(254,225,64,0.08)",
+    border: "rgba(254,225,64,0.3)",
+    emoji: "★",
+  },
+];
 
 const FEATURE_SLIDES = [
   {
@@ -43,18 +73,17 @@ export default function OnboardingPage() {
   const [selectedGender, setSelectedGender] = useState<Gender | null>(null);
   const [facts, setFacts] = useState({ comfortFood: "", major: "", campusVibe: "", deepFact: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [step, setStep] = useState<Step>("name");
+  const [step, setStep] = useState<Step>("identity");
   const [featureSlide, setFeatureSlide] = useState(0);
   const [slideDir, setSlideDir] = useState(1);
+  const [accentColor, setAccentColor] = useState<"orchid" | "mint" | "gold" | null>(null);
 
   // Name from auth — can be overridden ONCE during onboarding
   const authName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
   const [editingName, setEditingName] = useState(false);
   const [customName, setCustomName] = useState("");
   // The name that will actually be used — custom if set, else auth
-  const displayName = editingName
-    ? customName
-    : (customName || authName);
+  const displayName = editingName ? customName : (customName || authName);
   // Keep lockedName alias for handleContinue
   const lockedName = displayName;
 
@@ -73,6 +102,7 @@ export default function OnboardingPage() {
     sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
     sessionStorage.setItem("onboarding_gender", selectedGender ?? "other");
     sessionStorage.setItem("onboarding_facts", JSON.stringify(facts));
+    if (accentColor) sessionStorage.setItem("onboarding_accent", accentColor);
     router.push("/setup");
   };
 
@@ -96,7 +126,7 @@ export default function OnboardingPage() {
       setSlideDir(-1);
       setFeatureSlide((s) => s - 1);
     } else {
-      goToStep("facts");
+      goToStep("fragments");
     }
   };
 
@@ -149,7 +179,7 @@ export default function OnboardingPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         style={{ width: "100%", maxWidth: "420px", position: "relative", zIndex: 1 }}
       >
-        {/* Progress dots */}
+        {/* Progress dots — 4 steps */}
         <div style={{ display: "flex", gap: "6px", marginBottom: "36px" }}>
           {STEPS.map((_, i) => (
             <motion.div
@@ -165,21 +195,37 @@ export default function OnboardingPage() {
 
         <AnimatePresence mode="wait">
 
-          {/* ── STEP 1: NAME ── */}
-          {step === "name" && (
+          {/* ── STEP 1: IDENTITY (name + gender) ── */}
+          {step === "identity" && (
             <motion.div
-              key="name-step"
+              key="identity-step"
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -40 }}
               transition={{ duration: 0.32, ease: "easeOut" }}
             >
-              <h1 style={{ fontSize: "clamp(24px,6vw,30px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#f0f0f5" }}>
-                Hey, {displayName || "there"} 👋
+              <h1 style={{ fontSize: "clamp(24px,6vw,30px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#fff" }}>
+                Who are you?
               </h1>
-              <p style={{ color: "rgba(255,255,255,0.42)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
-                This is how your classmates will know you. Once you continue, your name is permanent.
+              <p style={{ color: "rgba(255,255,255,0.42)", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+                Your identity is permanent. Be yourself — your classmates will know the real you.
               </p>
+
+              {/* Identity lock warning */}
+              <div style={{
+                background: "rgba(254,225,64,0.06)",
+                border: "1px solid rgba(254,225,64,0.22)",
+                borderRadius: 16,
+                padding: "14px 16px",
+                marginBottom: 24,
+              }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "rgba(254,225,64,0.9)", marginBottom: 4 }}>
+                  🔒 Identity Lock
+                </p>
+                <p style={{ fontSize: 12, color: "rgba(254,225,64,0.65)", lineHeight: 1.6, margin: 0 }}>
+                  Your name and gender are set once, forever. Akin is built on authenticity — no aliases, no masks.
+                </p>
+              </div>
 
               {/* Name card */}
               <motion.div
@@ -294,56 +340,12 @@ export default function OnboardingPage() {
                     whileTap={{ scale: 0.97 }}
                     style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
                   >
-                    Use "{authName}" instead
+                    Use &quot;{authName}&quot; instead
                   </motion.button>
                 </div>
               )}
 
-              <motion.button
-                onClick={() => goToStep("gender")}
-                disabled={editingName && !customName.trim()}
-                className="btn-orchid"
-                whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
-                whileTap={{ scale: 0.97 }}
-                style={{ width: "100%", fontSize: "16px", padding: "16px", fontWeight: 700, opacity: editingName && !customName.trim() ? 0.45 : 1 }}
-              >
-                That's me →
-              </motion.button>
-            </motion.div>
-          )}
-
-          {/* ── STEP 2: GENDER ── */}
-          {step === "gender" && (
-            <motion.div
-              key="gender-step"
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -40 }}
-              transition={{ duration: 0.32, ease: "easeOut" }}
-            >
-              <h1
-                style={{
-                  fontSize: "clamp(24px,6vw,30px)",
-                  fontWeight: 900,
-                  letterSpacing: "-0.025em",
-                  marginBottom: 8,
-                  color: "#f0f0f5",
-                }}
-              >
-                Who are you?
-              </h1>
-              <p
-                style={{
-                  color: "rgba(255,255,255,0.42)",
-                  fontSize: "14px",
-                  marginBottom: "32px",
-                  lineHeight: 1.6,
-                }}
-              >
-                This helps Akin understand the room. Only your classmates can see this.
-              </p>
-
-              {/* Gender cards */}
+              {/* Gender selection */}
               <div
                 style={{
                   display: "grid",
@@ -367,12 +369,8 @@ export default function OnboardingPage() {
                       onClick={() => setSelectedGender(value)}
                       animate={{
                         scale: isSelected ? 1.04 : 1,
-                        background: isSelected
-                          ? "rgba(155,109,255,0.12)"
-                          : "rgba(255,255,255,0.04)",
-                        borderColor: isSelected
-                          ? "rgba(155,109,255,0.5)"
-                          : "rgba(255,255,255,0.08)",
+                        background: isSelected ? "rgba(155,109,255,0.12)" : "rgba(255,255,255,0.04)",
+                        borderColor: isSelected ? "rgba(155,109,255,0.5)" : "rgba(255,255,255,0.08)",
                       }}
                       whileHover={{ scale: isSelected ? 1.04 : 1.03 }}
                       whileTap={{ scale: 0.96 }}
@@ -389,12 +387,9 @@ export default function OnboardingPage() {
                         cursor: "pointer",
                         position: "relative",
                         outline: "none",
-                        boxShadow: isSelected
-                          ? "0 0 24px rgba(155,109,255,0.18)"
-                          : "none",
+                        boxShadow: isSelected ? "0 0 24px rgba(155,109,255,0.18)" : "none",
                       }}
                     >
-                      {/* Selection ring */}
                       <AnimatePresence>
                         {isSelected && (
                           <motion.div
@@ -413,7 +408,6 @@ export default function OnboardingPage() {
                           />
                         )}
                       </AnimatePresence>
-
                       <span style={{ fontSize: 36, lineHeight: 1 }}>{emoji}</span>
                       <span
                         style={{
@@ -432,77 +426,97 @@ export default function OnboardingPage() {
                 })}
               </div>
 
-              <div style={{ display: "flex", gap: 10 }}>
-                <motion.button
-                  onClick={() => goToStep("name")}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  style={{
-                    flex: 0,
-                    flexBasis: 52,
-                    padding: "16px",
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    borderRadius: 14,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "rgba(255,255,255,0.5)",
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                </motion.button>
-
-                <motion.button
-                  onClick={() => goToStep("colour")}
-                  className="btn-orchid"
-                  disabled={!selectedGender}
-                  whileHover={{ scale: selectedGender ? 1.02 : 1, boxShadow: selectedGender ? "0 12px 40px rgba(155,109,255,0.55)" : "none" }}
-                  whileTap={{ scale: selectedGender ? 0.97 : 1 }}
-                  style={{
-                    flex: 1,
-                    fontSize: "16px",
-                    padding: "16px",
-                    fontWeight: 700,
-                    opacity: selectedGender ? 1 : 0.45,
-                    cursor: selectedGender ? "pointer" : "not-allowed",
-                  }}
-                >
-                  Continue →
-                </motion.button>
-              </div>
+              {/* No back button on step 1 */}
+              <motion.button
+                onClick={() => goToStep("vibe")}
+                disabled={!selectedGender || (editingName && !customName.trim())}
+                className="btn-orchid"
+                whileHover={{ scale: (!selectedGender || (editingName && !customName.trim())) ? 1 : 1.02, boxShadow: (!selectedGender || (editingName && !customName.trim())) ? "none" : "0 12px 40px rgba(155,109,255,0.55)" }}
+                whileTap={{ scale: (!selectedGender || (editingName && !customName.trim())) ? 1 : 0.97 }}
+                style={{
+                  width: "100%",
+                  fontSize: "16px",
+                  padding: "16px",
+                  fontWeight: 700,
+                  opacity: (!selectedGender || (editingName && !customName.trim())) ? 0.45 : 1,
+                  cursor: (!selectedGender || (editingName && !customName.trim())) ? "not-allowed" : "pointer",
+                }}
+              >
+                Continue →
+              </motion.button>
             </motion.div>
           )}
 
-          {/* ── STEP 3: COLOUR ── */}
-          {step === "colour" && (
+          {/* ── STEP 2: VIBE (accent + gradient) ── */}
+          {step === "vibe" && (
             <motion.div
-              key="colour-step"
+              key="vibe-step"
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -40 }}
               transition={{ duration: 0.32, ease: "easeOut" }}
             >
-              <h1
-                style={{
-                  fontSize: "clamp(22px,5vw,28px)",
-                  fontWeight: 900,
-                  letterSpacing: "-0.025em",
-                  marginBottom: 8,
-                  color: "#f0f0f5",
-                }}
-              >
-                Pick your colour
+              <h1 style={{ fontSize: "clamp(24px,6vw,30px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#f0f0f5" }}>
+                Pick your vibe
               </h1>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
-                This is your avatar. Classmates see it, not a photo. You can change it later.
+              <p style={{ color: "rgba(255,255,255,0.42)", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+                Your accent color tints how you appear in your classmates&apos; feeds.
+              </p>
+
+              {/* Accent color cards */}
+              <div style={{ marginBottom: 28 }}>
+                {ACCENT_COLORS.map((c) => (
+                  <motion.button
+                    key={c.id}
+                    onClick={() => setAccentColor(c.id)}
+                    animate={{
+                      background: accentColor === c.id ? c.bg : "rgba(255,255,255,0.04)",
+                      borderColor: accentColor === c.id ? c.border : "rgba(255,255,255,0.08)",
+                      boxShadow: accentColor === c.id ? `0 0 32px ${c.glow}` : "none",
+                      scale: accentColor === c.id ? 1.03 : 1,
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "18px 20px",
+                      borderRadius: 18,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      fontFamily: "inherit",
+                      marginBottom: 10,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {/* Left: color circle with emoji */}
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: c.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 0 20px ${c.glow}`, fontSize: 18 }}>
+                      {c.emoji}
+                    </div>
+                    {/* Right: label + description */}
+                    <div style={{ textAlign: "left" }}>
+                      <p style={{ fontSize: 15, fontWeight: 700, color: accentColor === c.id ? c.color : "#f0f0f5", marginBottom: 3 }}>{c.label}</p>
+                      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                        {c.id === "orchid" ? "Mysterious, deep, rare" : c.id === "mint" ? "Electric, fresh, social" : "Bold, rare, magnetic"}
+                      </p>
+                    </div>
+                    {/* Selected checkmark */}
+                    {accentColor === c.id && (
+                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ marginLeft: "auto", width: 22, height: 22, borderRadius: "50%", background: c.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      </motion.div>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Gradient section */}
+              <p style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 14 }}>
+                Your Avatar
               </p>
 
               {/* Live preview */}
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: "28px" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={selectedGradient}
@@ -597,7 +611,7 @@ export default function OnboardingPage() {
 
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button
-                  onClick={() => goToStep("gender")}
+                  onClick={() => goToStep("identity")}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   style={{
@@ -620,11 +634,19 @@ export default function OnboardingPage() {
                 </motion.button>
 
                 <motion.button
-                  onClick={() => goToStep("facts")}
+                  onClick={() => goToStep("fragments")}
+                  disabled={!accentColor}
                   className="btn-orchid"
-                  whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
-                  whileTap={{ scale: 0.97 }}
-                  style={{ flex: 1, fontSize: "16px", padding: "16px", fontWeight: 700 }}
+                  whileHover={{ scale: accentColor ? 1.02 : 1, boxShadow: accentColor ? "0 12px 40px rgba(155,109,255,0.55)" : "none" }}
+                  whileTap={{ scale: accentColor ? 0.97 : 1 }}
+                  style={{
+                    flex: 1,
+                    fontSize: "16px",
+                    padding: "16px",
+                    fontWeight: 700,
+                    opacity: accentColor ? 1 : 0.45,
+                    cursor: accentColor ? "pointer" : "not-allowed",
+                  }}
                 >
                   Continue →
                 </motion.button>
@@ -632,28 +654,37 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* ── STEP 4: FACTS ── */}
-          {step === "facts" && (
-            <motion.div key="facts-step" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.32 }}>
+          {/* ── STEP 3: FRAGMENTS ── */}
+          {step === "fragments" && (
+            <motion.div
+              key="fragments-step"
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+            >
               <h1 style={{ fontSize: "clamp(22px,5vw,28px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#f0f0f5" }}>
-                Leave clues for your match
+                Leave fragments of yourself
               </h1>
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
-                When someone connects with you, these hints unlock in stages — keeping the mystery alive.
+                Your match discovers these clues as your connection deepens. Three fragments. Three stages.
               </p>
 
-              {/* Clue rows */}
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
 
-                {/* Comfort food */}
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(137,247,254,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
-                    🍜 Comfort food (hint at 0h)
-                  </label>
+                {/* Fragment 1 — The Hook */}
+                <div style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(137,247,254,0.15)",
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: "#89f7fe", marginBottom: 2 }}>🎣 The Hook</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed the moment you match</p>
                   <input
                     value={facts.comfortFood}
                     onChange={e => setFacts(f => ({ ...f, comfortFood: e.target.value }))}
-                    placeholder="e.g. Ramen at midnight"
+                    placeholder="My go-to late-night snack is..."
                     maxLength={40}
                     style={{
                       width: "100%", padding: "12px 14px", borderRadius: 12,
@@ -664,10 +695,18 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                {/* Major */}
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(0,229,160,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
-                    🎓 Major / Study (hint at 24h)
+                {/* Fragment 2 — The Context */}
+                <div style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(0,229,160,0.15)",
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: "#00e5a0", marginBottom: 2 }}>🌒 The Context</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed after 24 hours</p>
+
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "rgba(0,229,160,0.6)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
+                    🎓 Your Major
                   </label>
                   <input
                     value={facts.major}
@@ -678,15 +717,12 @@ export default function OnboardingPage() {
                       width: "100%", padding: "12px 14px", borderRadius: 12,
                       background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
                       color: "#f0f0f5", fontSize: 14, fontFamily: "inherit", outline: "none",
-                      boxSizing: "border-box",
+                      boxSizing: "border-box", marginBottom: 12,
                     }}
                   />
-                </div>
 
-                {/* Campus vibe — 4 button options */}
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(0,229,160,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>
-                    🏫 Campus vibe (hint at 24h)
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "rgba(0,229,160,0.6)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>
+                    🏫 Campus Vibe
                   </label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     {[
@@ -713,11 +749,15 @@ export default function OnboardingPage() {
                   </div>
                 </div>
 
-                {/* Deep fact */}
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(155,109,255,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
-                    ✦ Deep fact (revealed at 72h bond)
-                  </label>
+                {/* Fragment 3 — The Shared Secret */}
+                <div style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(155,109,255,0.15)",
+                  borderRadius: 16,
+                  padding: "16px 18px",
+                }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: "#9b6dff", marginBottom: 2 }}>✦ The Shared Secret</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed only at the Akin Bond — 72 hours</p>
                   <textarea
                     value={facts.deepFact}
                     onChange={e => setFacts(f => ({ ...f, deepFact: e.target.value }))}
@@ -735,11 +775,30 @@ export default function OnboardingPage() {
               </div>
 
               <div style={{ display: "flex", gap: 10 }}>
-                <motion.button onClick={() => goToStep("colour")} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} style={{ flex: 0, flexBasis: 52, padding: "16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.5)" }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                <motion.button
+                  onClick={() => goToStep("vibe")}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    flex: 0,
+                    flexBasis: 52,
+                    padding: "16px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
                 </motion.button>
                 <motion.button
-                  onClick={() => { setFeatureSlide(0); goToStep("features"); }}
+                  onClick={() => { setFeatureSlide(0); goToStep("commitment"); }}
                   className="btn-orchid"
                   whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
                   whileTap={{ scale: 0.97 }}
@@ -751,10 +810,10 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* ── STEP 5: FEATURES ── */}
-          {step === "features" && (
+          {/* ── STEP 4: COMMITMENT ── */}
+          {step === "commitment" && (
             <motion.div
-              key="features-step"
+              key="commitment-step"
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -40 }}
@@ -762,18 +821,46 @@ export default function OnboardingPage() {
             >
               <h1
                 style={{
-                  fontSize: "clamp(22px,5vw,28px)",
+                  fontSize: "clamp(22px,5.5vw,30px)",
                   fontWeight: 900,
                   letterSpacing: "-0.025em",
                   marginBottom: 8,
-                  color: "#f0f0f5",
+                  color: "#fff",
                 }}
               >
-                Here's how Akin works
+                The Gravity of Choice
               </h1>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
-                Three things worth knowing before you step in.
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "22px", lineHeight: 1.6 }}>
+                Before you step in, understand what this means.
               </p>
+
+              {/* Warning card */}
+              <div style={{
+                background: "rgba(155,109,255,0.07)",
+                border: "1px solid rgba(155,109,255,0.25)",
+                borderRadius: 20,
+                padding: 20,
+                marginBottom: 24,
+              }}>
+                <p style={{ fontSize: 14, fontWeight: 800, color: "rgba(200,170,255,0.95)", marginBottom: 12 }}>
+                  ⚠️ The Rules
+                </p>
+                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginBottom: 8, lineHeight: 1.7 }}>
+                  Your Akin pick is a commitment.
+                </p>
+                <ul style={{ margin: 0, padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[
+                    "One pick per class — choose who just gets you",
+                    "If you release your pick, your feed frosts for 24 hours",
+                    "Connections reveal in 4 stages over 72 hours",
+                    "This is real — no fake profiles, no second chances",
+                  ].map((rule, i) => (
+                    <li key={i} style={{ fontSize: 13, color: "rgba(255,255,255,0.52)", lineHeight: 1.6 }}>
+                      {rule}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               {/* Feature card carousel */}
               <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, marginBottom: 22 }}>
@@ -925,7 +1012,7 @@ export default function OnboardingPage() {
                     ? "Setting up…"
                     : featureSlide < FEATURE_SLIDES.length - 1
                     ? "Next →"
-                    : "Enter my class →"}
+                    : "I understand — Enter Akin →"}
                 </motion.button>
               </div>
             </motion.div>
