@@ -1,24 +1,28 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 import {
   MatchData,
-  MatchTier,
   getMatchTierProgress,
   formatRelativeTime,
-  GRADIENTS,
   getUserProfile,
   UserProfile,
 } from "@/lib/firestore";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type MatchTier = "echo" | "recognition" | "identification" | "bond";
+
 interface MatchTierCardProps {
   match: MatchData;
   myUserId: string;
+  onOpenSyncModal?: () => void;
 }
 
-// Seeded deterministic shard placement
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function seeded(s: number, max: number) {
   return ((s * 1664525 + 1013904223) & 0x7fffffff) % max;
 }
@@ -31,44 +35,113 @@ function formatDuration(ms: number): string {
   return `${m}m`;
 }
 
+// ─── Tier Config ──────────────────────────────────────────────────────────────
+
 const TIER_CONFIG: Record<
   MatchTier,
-  { label: string; icon: string; desc: string; color: string; bg: string; border: string }
+  {
+    label: string;
+    icon: string;
+    desc: string;
+    color: string;
+    bg: string;
+    border: string;
+    timerLabel: string;
+    nextLabel: string;
+  }
 > = {
-  match: {
-    label: "Syncing",
-    icon: "🌱",
-    desc: "You matched! Your connection reveals in stages over 72 hours.",
+  echo: {
+    label: "The Echo",
+    icon: "🌑",
+    desc: "A connection is forming. Their identity is hidden for now.",
     color: "#89f7fe",
     bg: "rgba(137,247,254,0.07)",
     border: "rgba(137,247,254,0.2)",
+    timerLabel: "reveals in",
+    nextLabel: "Recognition",
   },
   recognition: {
-    label: "Warming Up",
-    icon: "🌤",
-    desc: "Getting there — Akin Bond unlocks in a few hours.",
+    label: "Recognition",
+    icon: "🌒",
+    desc: "Getting closer. More clues unlocked.",
     color: "#00e5a0",
     bg: "rgba(0,229,160,0.07)",
     border: "rgba(0,229,160,0.22)",
+    timerLabel: "name reveals in",
+    nextLabel: "Identification",
+  },
+  identification: {
+    label: "Identification",
+    icon: "🌓",
+    desc: "You know who they are. Now what?",
+    color: "#fee140",
+    bg: "rgba(254,225,64,0.07)",
+    border: "rgba(254,225,64,0.2)",
+    timerLabel: "bond in",
+    nextLabel: "Akin Bond",
   },
   bond: {
     label: "Akin Bond",
     icon: "✦",
-    desc: "Full connection. You chose each other — no one else.",
+    desc: "Full connection. No one else in this class.",
     color: "#9b6dff",
     bg: "rgba(155,109,255,0.09)",
     border: "rgba(155,109,255,0.28)",
+    timerLabel: "",
+    nextLabel: "",
   },
 };
 
+// ─── Live Progress Hook (4-stage) ─────────────────────────────────────────────
+
 function useLiveProgress(match: MatchData) {
-  const [data, setData] = useState(() => getMatchTierProgress(match.createdAt));
+  function compute() {
+    // Delegate to firestore's getMatchTierProgress for timing data,
+    // then re-map the 3-tier result onto 4 tiers.
+    // Thresholds: 0-24h = echo, 24-48h = recognition, 48-72h = identification, 72h+ = bond
+    const raw = getMatchTierProgress(match.createdAt);
+    const ageMs = raw.ageMs;
+    const h24 = 86_400_000;
+    const h48 = 172_800_000;
+    const h72 = 259_200_000;
+
+    if (ageMs >= h72) {
+      return { tier: "bond" as MatchTier, progressToNext: 1, msToNext: 0, ageMs };
+    }
+    if (ageMs >= h48) {
+      return {
+        tier: "identification" as MatchTier,
+        progressToNext: (ageMs - h48) / (h72 - h48),
+        msToNext: h72 - ageMs,
+        ageMs,
+      };
+    }
+    if (ageMs >= h24) {
+      return {
+        tier: "recognition" as MatchTier,
+        progressToNext: (ageMs - h24) / (h48 - h24),
+        msToNext: h48 - ageMs,
+        ageMs,
+      };
+    }
+    return {
+      tier: "echo" as MatchTier,
+      progressToNext: ageMs / h24,
+      msToNext: h24 - ageMs,
+      ageMs,
+    };
+  }
+
+  const [data, setData] = useState(compute);
   useEffect(() => {
-    const id = setInterval(() => setData(getMatchTierProgress(match.createdAt)), 30_000);
+    const id = setInterval(() => setData(compute()), 30_000);
     return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match.createdAt]);
   return data;
 }
+
+// ─── Shatter Shards ───────────────────────────────────────────────────────────
 
 const SHARDS = Array.from({ length: 14 }, (_, i) => ({
   id: i,
@@ -81,16 +154,76 @@ const SHARDS = Array.from({ length: 14 }, (_, i) => ({
   delay: seeded(i * 19, 15) / 100,
 }));
 
-export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
+// ─── Avatar filter per tier ───────────────────────────────────────────────────
+
+function getAvatarFilter(tier: MatchTier): string {
+  switch (tier) {
+    case "echo":
+      return "blur(22px) brightness(0.4) saturate(0)";
+    case "recognition":
+      return "blur(10px) brightness(0.65) saturate(0.3)";
+    case "identification":
+      return "blur(2px) brightness(0.85) saturate(0.7)";
+    case "bond":
+      return "none";
+  }
+}
+
+// ─── Hint Card content per tier ───────────────────────────────────────────────
+
+function getHintContent(
+  tier: MatchTier,
+  theirProfile: UserProfile | null
+): { label: string; content: string } {
+  // Access extended facts via type assertion since UserProfile doesn't declare them yet
+  const facts = (theirProfile as unknown as { facts?: Record<string, string> })?.facts;
+
+  switch (tier) {
+    case "echo":
+      return {
+        label: "Comfort Food",
+        content: facts?.comfortFood ?? "A clue reveals in 24 hours...",
+      };
+    case "recognition": {
+      const major = facts?.major;
+      const campusVibe = facts?.campusVibe;
+      if (major && campusVibe) return { label: "About Them", content: `${major} · ${campusVibe}` };
+      if (major) return { label: "Their Major", content: major };
+      if (campusVibe) return { label: "Campus Vibe", content: campusVibe };
+      return { label: "Getting Closer", content: "More clues unlocking soon..." };
+    }
+    case "identification":
+      return {
+        label: "✨ Name Revealed",
+        content: "Name revealed! Find them.",
+      };
+    case "bond":
+      return {
+        label: "✦ Deep Fact",
+        content: facts?.deepFact ?? "Ask them in person 🫂",
+      };
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: MatchTierCardProps) {
   const isUser1 = match.user1Id === myUserId;
   const myGrad = (isUser1 ? match.user1Gradient : match.user2Gradient) ?? 0;
   const theirGrad = (isUser1 ? match.user2Gradient : match.user1Gradient) ?? 0;
   const myName = isUser1 ? match.user1Name : match.user2Name;
   const theirName = isUser1 ? match.user2Name : match.user1Name;
+  const theirUserId = isUser1 ? match.user2Id : match.user1Id;
   const isAkin = (match as { isAkinMatch?: boolean }).isAkinMatch;
 
   const { tier, progressToNext, msToNext } = useLiveProgress(match);
   const cfg = TIER_CONFIG[tier];
+
+  // Fetch their profile for ALL tiers (needed for hint cards)
+  const [theirProfile, setTheirProfile] = useState<UserProfile | null>(null);
+  useEffect(() => {
+    getUserProfile(theirUserId).then((p) => setTheirProfile(p ?? null));
+  }, [theirUserId]);
 
   // Bond bloom — fire once per match per session
   const bloomKey = `akin_bloomed_${match.matchId}`;
@@ -105,24 +238,22 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
     if (prevTier.current !== "bond" && tier === "bond" && !bloomed) {
       setShowBloom(true);
       sessionStorage?.setItem(bloomKey, "1");
-      const t = setTimeout(() => { setShowBloom(false); setBloomed(true); }, 1800);
+      const t = setTimeout(() => {
+        setShowBloom(false);
+        setBloomed(true);
+      }, 1800);
       return () => clearTimeout(t);
     }
     prevTier.current = tier;
   }, [tier, bloomed, bloomKey]);
 
-  // Fetch other user's shared secret at bond tier
-  const theirUserId = isUser1 ? match.user2Id : match.user1Id;
-  const [theirProfile, setTheirProfile] = useState<UserProfile | null>(null);
-  useEffect(() => {
-    if (tier !== "bond") return;
-    getUserProfile(theirUserId).then((p) => setTheirProfile(p ?? null));
-  }, [tier, theirUserId]);
-
-  // Progress ring
+  // Progress ring dimensions
   const R = 16;
   const circ = 2 * Math.PI * R;
   const ringOffset = circ * (1 - progressToNext);
+
+  // Hint card data
+  const hint = getHintContent(tier, theirProfile);
 
   return (
     <motion.div
@@ -172,9 +303,18 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                   viewBox="0 0 38 38"
                   style={{ transform: "rotate(-90deg)", flexShrink: 0 }}
                 >
-                  <circle cx="19" cy="19" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+                  <circle
+                    cx="19"
+                    cy="19"
+                    r={R}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.08)"
+                    strokeWidth="2.5"
+                  />
                   <motion.circle
-                    cx="19" cy="19" r={R}
+                    cx="19"
+                    cy="19"
+                    r={R}
                     fill="none"
                     stroke={cfg.color}
                     strokeWidth="2.5"
@@ -183,12 +323,18 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                     animate={{ strokeDashoffset: ringOffset }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
                   />
-                  {/* Center text in ring */}
                 </svg>
               )}
               {tier === "bond" && (
                 <motion.div
-                  animate={{ scale: [1, 1.3, 1], filter: ["drop-shadow(0 0 4px #9b6dff)", "drop-shadow(0 0 12px #9b6dff)", "drop-shadow(0 0 4px #9b6dff)"] }}
+                  animate={{
+                    scale: [1, 1.3, 1],
+                    filter: [
+                      "drop-shadow(0 0 4px #9b6dff)",
+                      "drop-shadow(0 0 12px #9b6dff)",
+                      "drop-shadow(0 0 4px #9b6dff)",
+                    ],
+                  }}
                   transition={{ duration: 2.4, repeat: Infinity }}
                   style={{ fontSize: 26, lineHeight: 1 }}
                 >
@@ -207,7 +353,8 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                       textTransform: "uppercase",
                     }}
                   >
-                    {tier !== "bond" ? cfg.icon + " " : ""}{cfg.label}
+                    {tier !== "bond" ? `${cfg.icon} ` : ""}
+                    {cfg.label}
                   </span>
                   {isAkin && (
                     <span
@@ -227,35 +374,95 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.3, maxWidth: 200 }}>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "rgba(255,255,255,0.35)",
+                    lineHeight: 1.3,
+                    maxWidth: 200,
+                  }}
+                >
                   {cfg.desc}
                 </p>
               </div>
             </div>
 
-            {/* Time remaining badge */}
-            {tier !== "bond" && (
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: 10,
-                  padding: "5px 10px",
-                  textAlign: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontWeight: 600, marginBottom: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  {tier === "match" ? "to reveal" : "to bond"}
-                </p>
-                <p style={{ fontSize: 14, fontWeight: 800, color: cfg.color, letterSpacing: "-0.01em" }}>
-                  {formatDuration(msToNext)}
-                </p>
-              </div>
-            )}
+            {/* Right side: timer pill + info button */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+              {/* Timer pill */}
+              {tier !== "bond" && (
+                <div
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 10,
+                    padding: "5px 10px",
+                    textAlign: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 10,
+                      color: "rgba(255,255,255,0.3)",
+                      fontWeight: 600,
+                      marginBottom: 1,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    {cfg.timerLabel}
+                  </p>
+                  <p
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: cfg.color,
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    {formatDuration(msToNext)}
+                  </p>
+                </div>
+              )}
+
+              {/* Info button */}
+              {onOpenSyncModal && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSyncModal();
+                  }}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: "50%",
+                    background: "rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    padding: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "rgba(255,255,255,0.45)",
+                      lineHeight: 1,
+                    }}
+                  >
+                    i
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* ── Avatars — side by side, always clearly visible */}
+          {/* ── Avatars */}
           <div
             style={{
               display: "flex",
@@ -283,9 +490,24 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
             />
 
             {/* My avatar */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "relative", zIndex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+                position: "relative",
+                zIndex: 1,
+              }}
+            >
               <motion.div
-                animate={{ boxShadow: [`0 0 0 0 ${cfg.color}00`, `0 0 0 6px ${cfg.color}22`, `0 0 0 0 ${cfg.color}00`] }}
+                animate={{
+                  boxShadow: [
+                    `0 0 0 0 ${cfg.color}00`,
+                    `0 0 0 6px ${cfg.color}22`,
+                    `0 0 0 0 ${cfg.color}00`,
+                  ],
+                }}
                 transition={{ duration: 2.4, repeat: Infinity }}
                 style={{ borderRadius: "50%" }}
               >
@@ -296,26 +518,59 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                   border={`2.5px solid ${cfg.color}66`}
                 />
               </motion.div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.65)", maxWidth: 60, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.65)",
+                  maxWidth: 60,
+                  textAlign: "center",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 You
               </span>
             </div>
 
             {/* Center connector */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "relative", zIndex: 1 }}>
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+                position: "relative",
+                zIndex: 1,
+              }}
+            >
               <motion.div
-                animate={tier === "bond"
-                  ? { scale: [1, 1.3, 1], rotate: [0, 15, -15, 0] }
-                  : { scale: [1, 1.1, 1] }
+                animate={
+                  tier === "bond"
+                    ? { scale: [1, 1.3, 1], rotate: [0, 15, -15, 0] }
+                    : { scale: [1, 1.1, 1] }
                 }
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                style={{ fontSize: tier === "bond" ? 20 : 16, color: cfg.color, filter: `drop-shadow(0 0 8px ${cfg.color})` }}
+                style={{
+                  fontSize: tier === "bond" ? 20 : 16,
+                  color: cfg.color,
+                  filter: `drop-shadow(0 0 8px ${cfg.color})`,
+                }}
               >
                 {tier === "bond" ? "✦" : "·····"}
               </motion.div>
               {/* Tier progress bar */}
               {tier !== "bond" && (
-                <div style={{ width: "100%", height: 3, borderRadius: 999, background: "rgba(255,255,255,0.08)" }}>
+                <div
+                  style={{
+                    width: "100%",
+                    height: 3,
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.08)",
+                  }}
+                >
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${progressToNext * 100}%` }}
@@ -327,13 +582,27 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
             </div>
 
             {/* Their avatar */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, position: "relative", zIndex: 1 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+                position: "relative",
+                zIndex: 1,
+              }}
+            >
               <motion.div
-                animate={{ boxShadow: [`0 0 0 0 ${cfg.color}00`, `0 0 0 6px ${cfg.color}22`, `0 0 0 0 ${cfg.color}00`] }}
+                animate={{
+                  boxShadow: [
+                    `0 0 0 0 ${cfg.color}00`,
+                    `0 0 0 6px ${cfg.color}22`,
+                    `0 0 0 0 ${cfg.color}00`,
+                  ],
+                }}
                 transition={{ duration: 2.4, delay: 0.6, repeat: Infinity }}
                 style={{ borderRadius: "50%" }}
               >
-                {/* Frost overlay for tier 0 */}
                 <div style={{ position: "relative" }}>
                   <GradientAvatar
                     gradient={theirGrad}
@@ -341,11 +610,12 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                     size={58}
                     border={`2.5px solid ${cfg.color}66`}
                     style={{
-                      filter: tier === "match" ? "blur(5px) brightness(0.6)" : tier === "recognition" ? "blur(1.5px) brightness(0.85)" : "none",
-                      transition: "filter 1.4s ease",
+                      filter: getAvatarFilter(tier),
+                      transition: "filter 1.8s ease, opacity 1.2s ease",
                     }}
                   />
-                  {tier === "match" && (
+                  {/* Frost overlay icon for echo stage */}
+                  {tier === "echo" && (
                     <div
                       style={{
                         position: "absolute",
@@ -360,7 +630,10 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                       <motion.span
                         animate={{ opacity: [0.5, 1, 0.5], scale: [0.9, 1.1, 0.9] }}
                         transition={{ duration: 2, repeat: Infinity }}
-                        style={{ fontSize: 18, filter: "drop-shadow(0 0 6px rgba(137,247,254,0.9))" }}
+                        style={{
+                          fontSize: 18,
+                          filter: "drop-shadow(0 0 6px rgba(137,247,254,0.9))",
+                        }}
                       >
                         ❄️
                       </motion.span>
@@ -368,65 +641,151 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                   )}
                 </div>
               </motion.div>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: tier === "match" ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.65)",
-                  maxWidth: 60,
-                  textAlign: "center",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  filter: tier === "match" ? "blur(3px)" : "none",
-                  transition: "filter 1.4s ease, color 1.4s ease",
-                  userSelect: tier === "match" ? "none" : "auto",
-                }}
-              >
-                {theirName}
-              </span>
+
+              {/* Their name label */}
+              {tier === "bond" ? (
+                // Bond: orchid glow name
+                <motion.span
+                  animate={{ opacity: [0.8, 1, 0.8] }}
+                  transition={{ duration: 2.2, repeat: Infinity }}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#c084fc",
+                    maxWidth: 60,
+                    textAlign: "center",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    textShadow: "0 0 8px rgba(192,132,252,0.6)",
+                  }}
+                >
+                  {theirName}
+                </motion.span>
+              ) : tier === "identification" ? (
+                // Identification: liquid shimmer
+                <motion.span
+                  animate={{
+                    backgroundPosition: ["200% center", "-200% center"],
+                  }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #f0f0f5 20%, #9b6dff 40%, #00e5a0 60%, #f0f0f5 80%)",
+                    backgroundSize: "200% auto",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    maxWidth: 60,
+                    textAlign: "center",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    display: "block",
+                  }}
+                >
+                  {theirName}
+                </motion.span>
+              ) : (
+                // Echo / Recognition: hidden
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "rgba(255,255,255,0.3)",
+                    maxWidth: 60,
+                    textAlign: "center",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    filter: tier === "echo" ? "blur(4px)" : "blur(2px)",
+                    transition: "filter 1.8s ease, color 1.4s ease",
+                    userSelect: "none",
+                  }}
+                >
+                  ???
+                </span>
+              )}
             </div>
           </div>
 
-          {/* ── Bond: Shared Secret */}
-          <AnimatePresence>
-            {tier === "bond" && bloomed && (
-              <motion.div
-                key="secret"
-                initial={{ opacity: 0, y: 8, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 280, damping: 24 }}
+          {/* ── Hint Card */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tier}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ delay: 0.15 }}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                background: tier === "identification"
+                  ? "rgba(254,225,64,0.05)"
+                  : tier === "bond"
+                  ? "rgba(155,109,255,0.09)"
+                  : "rgba(255,255,255,0.04)",
+                border: tier === "identification"
+                  ? "1px solid rgba(254,225,64,0.18)"
+                  : tier === "bond"
+                  ? "1px solid rgba(155,109,255,0.2)"
+                  : "1px solid rgba(255,255,255,0.08)",
+                marginBottom: 14,
+                boxShadow: tier === "identification"
+                  ? "0 0 18px rgba(254,225,64,0.08)"
+                  : "none",
+              }}
+            >
+              <p
                 style={{
-                  marginBottom: 14,
-                  padding: "12px 15px",
-                  borderRadius: 14,
-                  background: "rgba(155,109,255,0.09)",
-                  border: "1px solid rgba(155,109,255,0.2)",
+                  fontSize: 11,
+                  color: "rgba(255,255,255,0.32)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  fontWeight: 700,
+                  marginBottom: 4,
                 }}
               >
-                <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(155,109,255,0.65)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>
-                  ✦ Shared Secret
-                </p>
-                <p style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.55, fontStyle: "italic" }}>
-                  {theirProfile?.sharedSecret
-                    ? `"${theirProfile.sharedSecret}"`
-                    : "They haven't shared their secret yet. Ask them in person."}
-                </p>
-              </motion.div>
-            )}
+                {hint.label}
+              </p>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "rgba(255,255,255,0.6)",
+                  lineHeight: 1.5,
+                  fontStyle: "italic",
+                }}
+              >
+                {hint.content}
+              </p>
+            </motion.div>
           </AnimatePresence>
 
           {/* ── Footer */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.22)", fontWeight: 500 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                color: "rgba(255,255,255,0.22)",
+                fontWeight: 500,
+              }}
+            >
               {formatRelativeTime(match.createdAt)}
             </span>
-            {tier !== "bond" && (
+
+            {tier !== "bond" ? (
               <span style={{ fontSize: 11, color: cfg.color, fontWeight: 600 }}>
-                {tier === "match" ? "→ Warming Up in " : "→ Akin Bond in "}{formatDuration(msToNext)}
+                → {cfg.nextLabel} in {formatDuration(msToNext)}
               </span>
-            )}
-            {tier === "bond" && (
+            ) : (
               <motion.span
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 2.2, repeat: Infinity }}
@@ -438,7 +797,7 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
           </div>
         </div>
 
-        {/* ── Shatter-and-Bloom overlay */}
+        {/* ── Shatter-and-Bloom overlay (fires on transition to bond) */}
         <AnimatePresence>
           {showBloom && (
             <motion.div
@@ -473,9 +832,22 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                 <motion.div
                   key={s.id}
                   initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
-                  animate={{ x: s.x, y: s.y, scale: [0, s.scale, 0], rotate: s.rotate, opacity: [0, 1, 0] }}
+                  animate={{
+                    x: s.x,
+                    y: s.y,
+                    scale: [0, s.scale, 0],
+                    rotate: s.rotate,
+                    opacity: [0, 1, 0],
+                  }}
                   transition={{ duration: 0.9, delay: s.delay, ease: "easeOut" }}
-                  style={{ position: "absolute", width: s.size, height: s.size, borderRadius: s.id % 3 === 0 ? 2 : "50%", background: s.color, boxShadow: `0 0 ${s.size * 2}px ${s.color}` }}
+                  style={{
+                    position: "absolute",
+                    width: s.size,
+                    height: s.size,
+                    borderRadius: s.id % 3 === 0 ? 2 : "50%",
+                    background: s.color,
+                    boxShadow: `0 0 ${s.size * 2}px ${s.color}`,
+                  }}
                 />
               ))}
               {/* Central glow burst */}
@@ -483,7 +855,14 @@ export default function MatchTierCard({ match, myUserId }: MatchTierCardProps) {
                 initial={{ scale: 0, opacity: 1 }}
                 animate={{ scale: 4, opacity: 0 }}
                 transition={{ duration: 0.8, ease: "easeOut" }}
-                style={{ width: 60, height: 60, borderRadius: "50%", background: "radial-gradient(circle, rgba(155,109,255,0.9), rgba(0,229,160,0.4), transparent 70%)", filter: "blur(6px)" }}
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: "50%",
+                  background:
+                    "radial-gradient(circle, rgba(155,109,255,0.9), rgba(0,229,160,0.4), transparent 70%)",
+                  filter: "blur(6px)",
+                }}
               />
               {/* "Akin Bond" reveal text */}
               <motion.p

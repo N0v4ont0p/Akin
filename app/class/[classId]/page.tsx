@@ -12,6 +12,7 @@ import AkinSlot from "@/components/AkinSlot";
 import ProfileSheet from "@/components/ProfileSheet";
 import RefrostOverlay from "@/components/RefrostOverlay";
 import VibeCheckSheet from "@/components/VibeCheckSheet";
+import SyncModal from "@/components/SyncModal";
 import { Timestamp } from "firebase/firestore";
 import {
   getClass,
@@ -26,6 +27,7 @@ import {
   createOrFetchDailyVibeCheck,
   submitVibeResponse,
   subscribeToVibeCheck,
+  getMatchTierProgress,
   ClassData,
   UserProfile,
   MatchData,
@@ -56,6 +58,9 @@ export default function ClassPage() {
   const [cooldownToast, setCooldownToast] = useState("");
   // Profile sheet is FULLY SEPARATE from activeTab — fixes the tab-switching bug
   const [showProfile, setShowProfile] = useState(false);
+  // Sync Modal — reveal timeline
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncModalMatch, setSyncModalMatch] = useState<MatchData | null>(null);
   // Burning Bridge — refrost state
   const [refrostUntil, setRefrostUntil] = useState<Date | null>(null);
   // Vibe Check
@@ -227,6 +232,15 @@ export default function ClassPage() {
 
   const handlePass = useCallback((_classmate: UserProfile) => {}, []);
 
+  const handleOpenSyncModal = useCallback((match?: MatchData) => {
+    // If no specific match passed, use the akinPick match if found
+    const target = match ?? matches.find(m =>
+      (akinPick?.pickedId && (m.user1Id === akinPick.pickedId || m.user2Id === akinPick.pickedId))
+    ) ?? null;
+    setSyncModalMatch(target);
+    setShowSyncModal(true);
+  }, [matches, akinPick]);
+
   const handleUpdateProfile = useCallback(async (name: string, gradient: number) => {
     if (!user || !profile) return;
     await updateUserProfile(user.uid, name, gradient);
@@ -357,6 +371,7 @@ export default function ClassPage() {
             <AkinSlot
               akinPick={akinPick}
               onReleasePick={handleReleasePick}
+              onOpenSyncModal={akinPick ? () => handleOpenSyncModal() : undefined}
             />
           </div>
           {/* Browse content — wrapped in a relative container for RefrostOverlay */}
@@ -461,7 +476,11 @@ export default function ClassPage() {
             />
           )}
 
-          <MatchesList matches={matches} myUserId={user?.uid ?? ""} />
+          <MatchesList
+            matches={matches}
+            myUserId={user?.uid ?? ""}
+            onOpenSyncModal={handleOpenSyncModal}
+          />
         </motion.div>
       </div>
 
@@ -550,6 +569,14 @@ export default function ClassPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* ── Sync Modal — reveal timeline ─────────────────── */}
+      <SyncModal
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        currentTier={syncModalMatch ? getMatchTierProgress(syncModalMatch.createdAt).tier : "echo"}
+        matchCreatedAt={syncModalMatch?.createdAt ?? null}
+      />
     </div>
   );
 }

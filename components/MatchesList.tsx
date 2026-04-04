@@ -9,9 +9,10 @@ interface MatchesListProps {
   matches: MatchData[];
   myUserId: string;
   loading?: boolean;
+  onOpenSyncModal?: (match: MatchData) => void;
 }
 
-export default function MatchesList({ matches, myUserId, loading }: MatchesListProps) {
+export default function MatchesList({ matches, myUserId, loading, onOpenSyncModal }: MatchesListProps) {
   if (loading) {
     return (
       <div style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -111,6 +112,7 @@ export default function MatchesList({ matches, myUserId, loading }: MatchesListP
             key={match.matchId}
             match={match}
             myUserId={myUserId}
+            onOpenSyncModal={onOpenSyncModal ? () => onOpenSyncModal(match) : undefined}
           />
         ))}
       </AnimatePresence>

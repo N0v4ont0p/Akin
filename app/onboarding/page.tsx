@@ -7,10 +7,10 @@ import { useUser } from "@/providers/UserProvider";
 import GradientAvatar from "@/components/GradientAvatar";
 import { GRADIENTS } from "@/lib/firestore";
 
-type Step = "name" | "gender" | "colour" | "features";
+type Step = "name" | "gender" | "colour" | "facts" | "features";
 type Gender = "male" | "female" | "other";
 
-const STEPS: Step[] = ["name", "gender", "colour", "features"];
+const STEPS: Step[] = ["name", "gender", "colour", "facts", "features"];
 
 const FEATURE_SLIDES = [
   {
@@ -41,6 +41,7 @@ export default function OnboardingPage() {
   const { user, profile, loading } = useUser();
   const [selectedGradient, setSelectedGradient] = useState(0);
   const [selectedGender, setSelectedGender] = useState<Gender | null>(null);
+  const [facts, setFacts] = useState({ comfortFood: "", major: "", campusVibe: "", deepFact: "" });
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<Step>("name");
   const [featureSlide, setFeatureSlide] = useState(0);
@@ -62,6 +63,7 @@ export default function OnboardingPage() {
     sessionStorage.setItem("onboarding_name", lockedName);
     sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
     sessionStorage.setItem("onboarding_gender", selectedGender ?? "other");
+    sessionStorage.setItem("onboarding_facts", JSON.stringify(facts));
     router.push("/setup");
   };
 
@@ -85,7 +87,7 @@ export default function OnboardingPage() {
       setSlideDir(-1);
       setFeatureSlide((s) => s - 1);
     } else {
-      goToStep("colour");
+      goToStep("facts");
     }
   };
 
@@ -563,6 +565,125 @@ export default function OnboardingPage() {
                 </motion.button>
 
                 <motion.button
+                  onClick={() => goToStep("facts")}
+                  className="btn-orchid"
+                  whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{ flex: 1, fontSize: "16px", padding: "16px", fontWeight: 700 }}
+                >
+                  Continue →
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP 4: FACTS ── */}
+          {step === "facts" && (
+            <motion.div key="facts-step" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.32 }}>
+              <h1 style={{ fontSize: "clamp(22px,5vw,28px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#f0f0f5" }}>
+                Leave clues for your match
+              </h1>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "24px", lineHeight: 1.6 }}>
+                When someone connects with you, these hints unlock in stages — keeping the mystery alive.
+              </p>
+
+              {/* Clue rows */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+
+                {/* Comfort food */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(137,247,254,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
+                    🍜 Comfort food (hint at 0h)
+                  </label>
+                  <input
+                    value={facts.comfortFood}
+                    onChange={e => setFacts(f => ({ ...f, comfortFood: e.target.value }))}
+                    placeholder="e.g. Ramen at midnight"
+                    maxLength={40}
+                    style={{
+                      width: "100%", padding: "12px 14px", borderRadius: 12,
+                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+                      color: "#f0f0f5", fontSize: 14, fontFamily: "inherit", outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+
+                {/* Major */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(0,229,160,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
+                    🎓 Major / Study (hint at 24h)
+                  </label>
+                  <input
+                    value={facts.major}
+                    onChange={e => setFacts(f => ({ ...f, major: e.target.value }))}
+                    placeholder="e.g. Computer Science"
+                    maxLength={40}
+                    style={{
+                      width: "100%", padding: "12px 14px", borderRadius: 12,
+                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+                      color: "#f0f0f5", fontSize: 14, fontFamily: "inherit", outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+
+                {/* Campus vibe — 4 button options */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(0,229,160,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>
+                    🏫 Campus vibe (hint at 24h)
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {[
+                      { value: "Campus Hermit", emoji: "🦔" },
+                      { value: "Social Butterfly", emoji: "🦋" },
+                      { value: "Late Night Grinder", emoji: "🌙" },
+                      { value: "Early Bird", emoji: "🐦" },
+                    ].map(({ value, emoji }) => {
+                      const sel = facts.campusVibe === value;
+                      return (
+                        <motion.button
+                          key={value}
+                          type="button"
+                          onClick={() => setFacts(f => ({ ...f, campusVibe: sel ? "" : value }))}
+                          animate={{ background: sel ? "rgba(0,229,160,0.12)" : "rgba(255,255,255,0.04)", borderColor: sel ? "rgba(0,229,160,0.4)" : "rgba(255,255,255,0.08)" }}
+                          whileTap={{ scale: 0.96 }}
+                          style={{ padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", justifyContent: "center" }}
+                        >
+                          <span style={{ fontSize: 16 }}>{emoji}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: sel ? "rgba(0,229,160,0.9)" : "rgba(255,255,255,0.5)" }}>{value}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Deep fact */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "rgba(155,109,255,0.7)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
+                    ✦ Deep fact (revealed at 72h bond)
+                  </label>
+                  <textarea
+                    value={facts.deepFact}
+                    onChange={e => setFacts(f => ({ ...f, deepFact: e.target.value }))}
+                    placeholder="Something only someone Akin to you would understand..."
+                    maxLength={120}
+                    rows={2}
+                    style={{
+                      width: "100%", padding: "12px 14px", borderRadius: 12,
+                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+                      color: "#f0f0f5", fontSize: 13, fontFamily: "inherit", outline: "none",
+                      resize: "none", lineHeight: 1.55, boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button onClick={() => goToStep("colour")} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }} style={{ flex: 0, flexBasis: 52, padding: "16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.5)" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+                </motion.button>
+                <motion.button
                   onClick={() => { setFeatureSlide(0); goToStep("features"); }}
                   className="btn-orchid"
                   whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
@@ -575,7 +696,7 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* ── STEP 4: FEATURES ── */}
+          {/* ── STEP 5: FEATURES ── */}
           {step === "features" && (
             <motion.div
               key="features-step"

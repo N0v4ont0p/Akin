@@ -96,6 +96,12 @@ export interface UserProfile {
   akinPickedAt?: Timestamp | null;
   refrostUntil?: Timestamp | null;
   sharedSecret?: string;
+  facts?: {
+    comfortFood?: string;
+    major?: string;
+    campusVibe?: string;
+    deepFact?: string;
+  };
 }
 
 export interface LikeData {
@@ -201,12 +207,14 @@ export async function createUserProfile(
   schoolName: string,
   email: string,
   photoURL: string,
-  gender?: "male" | "female" | "other"
+  gender?: "male" | "female" | "other",
+  facts?: { comfortFood?: string; major?: string; campusVibe?: string; deepFact?: string }
 ): Promise<void> {
   await setDoc(doc(db, "users", userId), {
     name: name.trim(),
     avatarGradient,
     ...(gender ? { gender } : {}),
+    ...(facts ? { facts } : {}),
     classId,
     className,
     schoolId,
@@ -530,7 +538,7 @@ export function subscribeToUserDoc(
 
 // ─── Sync Streak / Match Tiers ───────────────────────────────────────────────
 
-export type MatchTier = "match" | "recognition" | "bond";
+export type MatchTier = "echo" | "recognition" | "identification" | "bond";
 
 export function getMatchTierProgress(createdAt: Timestamp | null): {
   tier: MatchTier;
@@ -538,13 +546,15 @@ export function getMatchTierProgress(createdAt: Timestamp | null): {
   msToNext: number;
   ageMs: number;
 } {
-  if (!createdAt) return { tier: "match", progressToNext: 0, msToNext: 86400000, ageMs: 0 };
+  if (!createdAt) return { tier: "echo", progressToNext: 0, msToNext: 86400000, ageMs: 0 };
   const ageMs = Date.now() - createdAt.toMillis();
   const h24 = 86400000;
+  const h48 = 172800000;
   const h72 = 259200000;
   if (ageMs >= h72) return { tier: "bond", progressToNext: 1, msToNext: 0, ageMs };
-  if (ageMs >= h24) return { tier: "recognition", progressToNext: (ageMs - h24) / (h72 - h24), msToNext: h72 - ageMs, ageMs };
-  return { tier: "match", progressToNext: ageMs / h24, msToNext: h24 - ageMs, ageMs };
+  if (ageMs >= h48) return { tier: "identification", progressToNext: (ageMs - h48) / (h72 - h48), msToNext: h72 - ageMs, ageMs };
+  if (ageMs >= h24) return { tier: "recognition", progressToNext: (ageMs - h24) / (h48 - h24), msToNext: h48 - ageMs, ageMs };
+  return { tier: "echo", progressToNext: ageMs / h24, msToNext: h24 - ageMs, ageMs };
 }
 
 export async function updateSharedSecret(userId: string, secret: string): Promise<void> {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 import { AkinPick } from "@/lib/firestore";
@@ -9,6 +9,7 @@ interface AkinSlotProps {
   akinPick: AkinPick | null;
   onPickRequest?: () => void;
   onReleasePick?: () => Promise<void>;
+  onOpenSyncModal?: () => void;
 }
 
 function CooldownTimer({ expiresAt }: { expiresAt: Date }) {
@@ -34,12 +35,22 @@ function CooldownTimer({ expiresAt }: { expiresAt: Date }) {
   return <span>{remaining}</span>;
 }
 
-export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: AkinSlotProps) {
+const RING_SIZE = 84;
+const RING_R = 38;
+const RING_CIRC = 2 * Math.PI * RING_R;
+const LOCK_DURATION_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+export default function AkinSlot({
+  akinPick,
+  onPickRequest,
+  onReleasePick,
+  onOpenSyncModal,
+}: AkinSlotProps) {
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [lockProgress, setLockProgress] = useState(0);
   const now = Date.now();
 
-  // Determine cooldown state
   const expiresAtMs = akinPick?.expiresAt?.toMillis() ?? 0;
   const isLocked = akinPick !== null && expiresAtMs > now;
   const isFree = akinPick !== null && expiresAtMs <= now;
@@ -47,6 +58,24 @@ export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: Aki
 
   const expiresAtDate = new Date(expiresAtMs);
 
+  // Compute live lock ring progress
+  useEffect(() => {
+    if (!isLocked) return;
+    const update = () => {
+      const elapsed = LOCK_DURATION_MS - (expiresAtMs - Date.now());
+      const progress = Math.min(1, Math.max(0, elapsed / LOCK_DURATION_MS));
+      setLockProgress(progress);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [isLocked, expiresAtMs]);
+
+  // Ring stroke offset — 0 offset = full ring; RING_CIRC offset = empty ring
+  // We want the ring to deplete as time passes: starts full, ends empty
+  const ringOffset = RING_CIRC * lockProgress;
+
+  // ── Empty state ──────────────────────────────────────────────────────────────
   if (isEmpty) {
     return (
       <motion.div
@@ -58,85 +87,96 @@ export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: Aki
           WebkitBackdropFilter: "blur(24px)",
           border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: "20px",
-          padding: "24px 20px",
-          textAlign: "center",
           cursor: onPickRequest ? "pointer" : "default",
         }}
         onClick={onPickRequest}
         whileHover={onPickRequest ? { scale: 1.01 } : {}}
         whileTap={onPickRequest ? { scale: 0.99 } : {}}
       >
-        {/* Ghost circle with spinning dashed border */}
-        <div
-          style={{
-            position: "relative",
-            width: "80px",
-            height: "80px",
-            margin: "0 auto 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {/* Spinning dashed ring */}
+        <div style={{ textAlign: "center", padding: "24px 16px" }}>
+          {/* Large orbit ring — 100px diameter */}
           <div
             style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              border: "2px dashed rgba(155,109,255,0.5)",
-              animation: "spin-slow 8s linear infinite",
-            }}
-          />
-          {/* Breathing inner glow */}
-          <motion.div
-            animate={{
-              boxShadow: [
-                "0 0 20px rgba(155,109,255,0.15)",
-                "0 0 40px rgba(155,109,255,0.4)",
-                "0 0 20px rgba(155,109,255,0.15)",
-              ],
-            }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            style={{
-              width: "60px",
-              height: "60px",
-              borderRadius: "50%",
-              background: "rgba(155,109,255,0.08)",
-              border: "1px solid rgba(155,109,255,0.2)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              position: "relative",
+              width: 100,
+              height: 100,
+              margin: "0 auto 20px",
             }}
           >
-            {/* Orchid star */}
-            <span style={{ fontSize: "20px", opacity: 0.5 }}>✦</span>
-          </motion.div>
-        </div>
+            {/* Outer dashed ring */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                border: "2px dashed rgba(155,109,255,0.4)",
+                animation: "spin-slow 12s linear infinite",
+              }}
+            />
+            {/* Orbiting particle */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+              style={{ position: "absolute", inset: 0 }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#9b6dff",
+                  boxShadow: "0 0 12px #9b6dff",
+                }}
+              />
+            </motion.div>
+            {/* Inner glow */}
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 20px rgba(155,109,255,0.15)",
+                  "0 0 40px rgba(155,109,255,0.5)",
+                  "0 0 20px rgba(155,109,255,0.15)",
+                ],
+              }}
+              transition={{ duration: 3, repeat: Infinity }}
+              style={{
+                position: "absolute",
+                inset: 12,
+                borderRadius: "50%",
+                background: "rgba(155,109,255,0.08)",
+                border: "1px solid rgba(155,109,255,0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span style={{ fontSize: 22, opacity: 0.45 }}>✦</span>
+            </motion.div>
+          </div>
 
-        <p
-          style={{
-            fontSize: "14px",
-            fontWeight: 600,
-            color: "rgba(240,240,245,0.6)",
-            marginBottom: "4px",
-          }}
-        >
-          Who in this room is Akin to you?
-        </p>
-        <p
-          style={{
-            fontSize: "12px",
-            color: "rgba(240,240,245,0.3)",
-          }}
-        >
-          Pick one classmate. One pick. Forever honest.
-        </p>
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "rgba(240,240,245,0.6)",
+              marginBottom: 4,
+            }}
+          >
+            Who in this room is Akin to you?
+          </p>
+          <p style={{ fontSize: 12, color: "rgba(240,240,245,0.28)" }}>
+            One pick. Forever honest.
+          </p>
+        </div>
       </motion.div>
     );
   }
 
-  // Filled state (locked or free)
+  // ── Filled state ─────────────────────────────────────────────────────────────
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -151,46 +191,45 @@ export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: Aki
         boxShadow: isLocked ? "0 0 32px rgba(155,109,255,0.12)" : "none",
       }}
     >
-      {/* Header */}
+      {/* Label row */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: "16px",
+          marginBottom: 20,
         }}
       >
-        <span
-          style={{
-            fontSize: "12px",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            color: "rgba(155,109,255,0.8)",
-          }}
-        >
-          Your Akin
-        </span>
-
-        {isLocked && akinPick?.expiresAt && (
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              background: "rgba(155,109,255,0.1)",
-              border: "1px solid rgba(155,109,255,0.25)",
-              borderRadius: "999px",
-              padding: "4px 10px",
-              fontSize: "12px",
-              color: "rgba(155,109,255,0.9)",
-              fontWeight: 500,
+              fontSize: 12,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              color: "rgba(155,109,255,0.8)",
             }}
           >
-            <span>🔒</span>
-            <CooldownTimer expiresAt={expiresAtDate} />
-          </div>
-        )}
+            Your Akin ✦
+          </span>
+          {onOpenSyncModal && (
+            <button
+              onClick={onOpenSyncModal}
+              style={{
+                background: "none",
+                border: "none",
+                padding: "2px 6px",
+                cursor: "pointer",
+                borderRadius: 6,
+                lineHeight: 1,
+              }}
+            >
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>
+                Timeline ↗
+              </span>
+            </button>
+          )}
+        </div>
 
         {isFree && !showReleaseConfirm && (
           <motion.button
@@ -214,58 +253,137 @@ export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: Aki
         )}
       </div>
 
-      {/* Avatar + name */}
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <div style={{ position: "relative" }}>
-          {/* Orchid glowing ring */}
-          <motion.div
-            animate={
-              isLocked
-                ? {
-                    boxShadow: [
-                      "0 0 0 3px rgba(155,109,255,0.3)",
-                      "0 0 0 5px rgba(155,109,255,0.5)",
-                      "0 0 0 3px rgba(155,109,255,0.3)",
-                    ],
-                  }
-                : {}
-            }
-            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      {/* Orbit ring + avatar — centered */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        <div
+          style={{
+            position: "relative",
+            width: RING_SIZE,
+            height: RING_SIZE,
+          }}
+        >
+          {/* SVG progress ring */}
+          <svg
+            width={RING_SIZE}
+            height={RING_SIZE}
+            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
             style={{
-              borderRadius: "50%",
-              padding: "3px",
-              background: isLocked
-                ? "linear-gradient(135deg, rgba(155,109,255,0.6), rgba(109,59,255,0.4))"
-                : "transparent",
+              position: "absolute",
+              inset: 0,
+              transform: "rotate(-90deg)",
             }}
           >
-            <GradientAvatar
-              gradient={akinPick.pickedGradient ?? 0}
-              name={akinPick.pickedName ?? "?"}
-              size={56}
-              border="2px solid rgba(0,0,0,0.2)"
+            {/* Track */}
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_R}
+              fill="none"
+              stroke="rgba(155,109,255,0.12)"
+              strokeWidth="2.5"
             />
-          </motion.div>
+            {/* Progress arc */}
+            {isLocked && (
+              <motion.circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={RING_R}
+                fill="none"
+                stroke="#9b6dff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeDasharray={RING_CIRC}
+                animate={{ strokeDashoffset: ringOffset }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+              />
+            )}
+            {/* Free state: dim full ring */}
+            {isFree && (
+              <circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={RING_R}
+                fill="none"
+                stroke="rgba(155,109,255,0.22)"
+                strokeWidth="2"
+                strokeDasharray="4 6"
+              />
+            )}
+          </svg>
+
+          {/* Avatar centered inside ring */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <motion.div
+              animate={
+                isLocked
+                  ? {
+                      boxShadow: [
+                        "0 0 0 0 rgba(155,109,255,0)",
+                        "0 0 0 5px rgba(155,109,255,0.28)",
+                        "0 0 0 0 rgba(155,109,255,0)",
+                      ],
+                    }
+                  : {}
+              }
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+              style={{ borderRadius: "50%" }}
+            >
+              <GradientAvatar
+                gradient={akinPick.pickedGradient ?? 0}
+                name={akinPick.pickedName ?? "?"}
+                size={60}
+                border={
+                  isLocked
+                    ? "2px solid rgba(155,109,255,0.5)"
+                    : "2px solid rgba(255,255,255,0.12)"
+                }
+              />
+            </motion.div>
+          </div>
         </div>
 
-        <div>
+        {/* Name + lock status */}
+        <div style={{ textAlign: "center" }}>
           <p
             style={{
-              fontSize: "17px",
+              fontSize: 17,
               fontWeight: 700,
               color: "#f0f0f5",
-              marginBottom: "2px",
+              marginBottom: 4,
             }}
           >
             {akinPick.pickedName ?? "Unknown"}
           </p>
-          {isLocked ? (
-            <p style={{ fontSize: "12px", color: "rgba(155,109,255,0.6)", fontWeight: 500 }}>
-              Locked for{" "}
+          {isLocked && akinPick.expiresAt && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "rgba(155,109,255,0.1)",
+                border: "1px solid rgba(155,109,255,0.25)",
+                borderRadius: "999px",
+                padding: "4px 10px",
+                fontSize: 12,
+                color: "rgba(155,109,255,0.9)",
+                fontWeight: 500,
+              }}
+            >
+              <span>🔒</span>
+              <span>Locked for </span>
               <CooldownTimer expiresAt={expiresAtDate} />
-            </p>
-          ) : (
-            <p style={{ fontSize: "12px", color: "rgba(240,240,245,0.4)" }}>
+            </div>
+          )}
+          {isFree && (
+            <p style={{ fontSize: 12, color: "rgba(240,240,245,0.4)" }}>
               Cooldown expired — you can change
             </p>
           )}
@@ -292,12 +410,24 @@ export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: Aki
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 16, flexShrink: 0 }}>🔥</span>
               <div>
-                <p style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,120,80,0.9)", marginBottom: 3 }}>
+                <p
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "rgba(255,120,80,0.9)",
+                    marginBottom: 3,
+                  }}
+                >
                   Burning Bridge Warning
                 </p>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-                  Releasing <strong style={{ color: "rgba(255,255,255,0.7)" }}>{akinPick?.pickedName}</strong> will frost your class feed for{" "}
-                  <strong style={{ color: "rgba(255,120,80,0.85)" }}>24 hours</strong>. You cannot browse or pick during that time.
+                  Releasing{" "}
+                  <strong style={{ color: "rgba(255,255,255,0.7)" }}>
+                    {akinPick?.pickedName}
+                  </strong>{" "}
+                  will frost your class feed for{" "}
+                  <strong style={{ color: "rgba(255,120,80,0.85)" }}>24 hours</strong>. You
+                  cannot browse or pick during that time.
                 </p>
               </div>
             </div>

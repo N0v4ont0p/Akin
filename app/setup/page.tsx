@@ -36,6 +36,8 @@ export default function SetupPage() {
     const name = storedName ?? user.displayName?.split(" ")[0] ?? "Student";
     const gradient = storedGradient ? parseInt(storedGradient, 10) : 0;
     const gender = storedGender ?? undefined;
+    const storedFacts = sessionStorage.getItem("onboarding_facts");
+    const facts = storedFacts ? JSON.parse(storedFacts) as { comfortFood?: string; major?: string; campusVibe?: string; deepFact?: string } : undefined;
 
     setSubmitting(true);
     setError("");
@@ -51,13 +53,15 @@ export default function SetupPage() {
         classData.schoolName,
         user.email ?? "",
         user.photoURL ?? "",
-        gender
+        gender,
+        facts
       );
 
       // Clean up session storage
       sessionStorage.removeItem("onboarding_name");
       sessionStorage.removeItem("onboarding_gradient");
       sessionStorage.removeItem("onboarding_gender");
+      sessionStorage.removeItem("onboarding_facts");
 
       // Hard navigate so the page reloads with fresh profile state
       window.location.href = `/class/${classData.classId}`;
