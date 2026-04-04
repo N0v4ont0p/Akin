@@ -8,6 +8,7 @@ import { AkinPick } from "@/lib/firestore";
 interface AkinSlotProps {
   akinPick: AkinPick | null;
   onPickRequest?: () => void;
+  onReleasePick?: () => Promise<void>;
 }
 
 function CooldownTimer({ expiresAt }: { expiresAt: Date }) {
@@ -33,7 +34,9 @@ function CooldownTimer({ expiresAt }: { expiresAt: Date }) {
   return <span>{remaining}</span>;
 }
 
-export default function AkinSlot({ akinPick, onPickRequest }: AkinSlotProps) {
+export default function AkinSlot({ akinPick, onPickRequest, onReleasePick }: AkinSlotProps) {
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const now = Date.now();
 
   // Determine cooldown state
@@ -189,9 +192,11 @@ export default function AkinSlot({ akinPick, onPickRequest }: AkinSlotProps) {
           </div>
         )}
 
-        {isFree && (
-          <button
-            onClick={onPickRequest}
+        {isFree && !showReleaseConfirm && (
+          <motion.button
+            onClick={() => setShowReleaseConfirm(true)}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
             style={{
               background: "rgba(155,109,255,0.1)",
               border: "1px solid rgba(155,109,255,0.3)",
@@ -205,7 +210,7 @@ export default function AkinSlot({ akinPick, onPickRequest }: AkinSlotProps) {
             }}
           >
             Change
-          </button>
+          </motion.button>
         )}
       </div>
 
@@ -266,6 +271,90 @@ export default function AkinSlot({ akinPick, onPickRequest }: AkinSlotProps) {
           )}
         </div>
       </div>
+
+      {/* ── Burning Bridge release confirm ──────────────────── */}
+      <AnimatePresence>
+        {showReleaseConfirm && (
+          <motion.div
+            key="release-confirm"
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 340, damping: 28 }}
+            style={{
+              marginTop: 16,
+              borderRadius: 16,
+              background: "rgba(255,60,60,0.06)",
+              border: "1px solid rgba(255,80,80,0.22)",
+              padding: "14px 16px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>🔥</span>
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,120,80,0.9)", marginBottom: 3 }}>
+                  Burning Bridge Warning
+                </p>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
+                  Releasing <strong style={{ color: "rgba(255,255,255,0.7)" }}>{akinPick?.pickedName}</strong> will frost your class feed for{" "}
+                  <strong style={{ color: "rgba(255,120,80,0.85)" }}>24 hours</strong>. You cannot browse or pick during that time.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <motion.button
+                onClick={async () => {
+                  if (releasing) return;
+                  setReleasing(true);
+                  try {
+                    await onReleasePick?.();
+                  } finally {
+                    setReleasing(false);
+                    setShowReleaseConfirm(false);
+                  }
+                }}
+                disabled={releasing}
+                whileHover={{ scale: releasing ? 1 : 1.03 }}
+                whileTap={{ scale: releasing ? 1 : 0.97 }}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: 12,
+                  background: "rgba(255,60,60,0.14)",
+                  border: "1px solid rgba(255,80,80,0.3)",
+                  color: "rgba(255,120,80,0.9)",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: releasing ? "wait" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: releasing ? 0.6 : 1,
+                }}
+              >
+                {releasing ? "Releasing…" : "Release & Frost"}
+              </motion.button>
+              <motion.button
+                onClick={() => setShowReleaseConfirm(false)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  color: "rgba(255,255,255,0.55)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Keep my pick
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

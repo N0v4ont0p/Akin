@@ -5,58 +5,31 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import GradientAvatar from "@/components/GradientAvatar";
-import { GRADIENTS, getInitials } from "@/lib/firestore";
+import { GRADIENTS } from "@/lib/firestore";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user, profile, loading, refreshProfile } = useUser();
-  const [name, setName] = useState("");
+  const { user, profile, loading } = useUser();
   const [selectedGradient, setSelectedGradient] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [step, setStep] = useState<"name" | "colour">("name");
+
+  // Derive display name from auth — locked, cannot be changed
+  const lockedName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
-      router.push("/auth");
-      return;
-    }
-    if (profile?.classId) {
-      router.push(`/class/${profile.classId}`);
-      return;
-    }
-    if (profile?.name) {
-      // Has profile but no class
-      router.push("/setup");
-      return;
-    }
-    // Pre-fill from Google displayName
-    if (user.displayName) {
-      setName(user.displayName.split(" ")[0]);
-    }
+    if (!user) { router.push("/auth"); return; }
+    if (profile?.classId) { router.push(`/class/${profile.classId}`); return; }
+    if (profile?.name) { router.push("/setup"); return; }
   }, [loading, user, profile, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    if (!name.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-
+  const handleContinue = async () => {
+    if (!user || !lockedName) return;
     setSubmitting(true);
-    setError("");
-
-    try {
-      // Store the selected name/gradient temporarily in session storage
-      // The actual user profile creation happens at /setup after class selection
-      sessionStorage.setItem("onboarding_name", name.trim());
-      sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
-      router.push("/setup");
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setSubmitting(false);
-    }
+    sessionStorage.setItem("onboarding_name", lockedName);
+    sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
+    router.push("/setup");
   };
 
   if (loading || !user) {
@@ -73,7 +46,6 @@ export default function OnboardingPage() {
 
   return (
     <div
-      className="page-enter"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -81,173 +53,299 @@ export default function OnboardingPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: "40px 20px 60px",
+        overflow: "hidden",
       }}
     >
+      {/* Ambient glow */}
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: [0.3, 0.6, 0.3], scale: [1, 1.1, 1] }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          position: "fixed",
+          width: 500,
+          height: 500,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(155,109,255,0.14), transparent 70%)",
+          filter: "blur(60px)",
+          top: "-100px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
+
+      <motion.div
+        initial={{ opacity: 0, y: 28 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        style={{ width: "100%", maxWidth: "440px" }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        style={{ width: "100%", maxWidth: "420px", position: "relative", zIndex: 1 }}
       >
-        {/* Progress */}
-        <div style={{ display: "flex", gap: "6px", marginBottom: "32px" }}>
+        {/* Progress bar */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "36px" }}>
           {[0, 1].map((i) => (
-            <div
+            <motion.div
               key={i}
-              style={{
-                flex: 1,
-                height: "3px",
-                borderRadius: "999px",
-                background: i === 0 ? "var(--orchid)" : "rgba(255,255,255,0.12)",
-                transition: "background 0.3s",
-              }}
+              animate={{ background: i === 0 ? "#9b6dff" : "rgba(255,255,255,0.10)" }}
+              style={{ flex: 1, height: "3px", borderRadius: "999px" }}
             />
           ))}
         </div>
 
-        <h1 style={{ fontSize: "28px", fontWeight: "800", letterSpacing: "-0.02em", marginBottom: "8px" }}>
-          Set up your profile
-        </h1>
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "36px" }}>
-          Only your name and avatar are visible to classmates.
-        </p>
+        <AnimatePresence mode="wait">
+          {step === "name" ? (
+            <motion.div
+              key="name-step"
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
+              <h1
+                style={{
+                  fontSize: "clamp(24px,6vw,30px)",
+                  fontWeight: 900,
+                  letterSpacing: "-0.025em",
+                  marginBottom: 8,
+                  color: "#f0f0f5",
+                }}
+              >
+                Hey, {lockedName || "there"} 👋
+              </h1>
+              <p
+                style={{
+                  color: "rgba(255,255,255,0.42)",
+                  fontSize: "14px",
+                  marginBottom: "36px",
+                  lineHeight: 1.6,
+                }}
+              >
+                This is how your classmates will see you. Your name comes from your account and stays permanent — no impersonating, no trolling.
+              </p>
 
-        <form onSubmit={handleSubmit}>
-          {/* Avatar preview */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: "28px" }}>
-            <AnimatePresence mode="wait">
+              {/* Big name card — read only */}
               <motion.div
-                key={selectedGradient}
-                initial={{ scale: 0.75, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.75, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                whileHover={{ scale: 1.01 }}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(155,109,255,0.30)",
+                  borderRadius: 20,
+                  padding: "22px 24px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 18,
+                  marginBottom: 28,
+                  boxShadow: "0 0 32px rgba(155,109,255,0.08)",
+                }}
               >
                 <GradientAvatar
                   gradient={selectedGradient}
-                  name={name || "?"}
-                  size={100}
-                  border="3px solid rgba(255,255,255,0.15)"
-                  style={{ boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}
+                  name={lockedName || "?"}
+                  size={68}
+                  border="2px solid rgba(255,255,255,0.1)"
                 />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 800,
+                      color: "#f0f0f5",
+                      letterSpacing: "-0.02em",
+                      marginBottom: 4,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {lockedName || "—"}
+                  </p>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      background: "rgba(155,109,255,0.10)",
+                      border: "1px solid rgba(155,109,255,0.22)",
+                      borderRadius: 999,
+                      padding: "3px 10px",
+                    }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(155,109,255,0.8)" strokeWidth="2.5" strokeLinecap="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    <span style={{ fontSize: 11, color: "rgba(155,109,255,0.75)", fontWeight: 600 }}>
+                      locked · authentic
+                    </span>
+                  </div>
+                </div>
               </motion.div>
-            </AnimatePresence>
-          </div>
 
-          {/* Name input */}
-          <div style={{ marginBottom: "24px" }}>
-            <label style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: "700",
-              color: "rgba(255,255,255,0.4)",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              marginBottom: "8px",
-            }}>
-              Your first name
-            </label>
-            <input
-              className="input-glass"
-              type="text"
-              placeholder="e.g. Jordan"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setError(""); }}
-              maxLength={24}
-              autoComplete="given-name"
-              autoFocus
-              style={{ fontSize: "16px" }}
-            />
-          </div>
+              <motion.button
+                onClick={() => setStep("colour")}
+                className="btn-orchid"
+                whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
+                whileTap={{ scale: 0.97 }}
+                style={{ width: "100%", fontSize: "16px", padding: "16px", fontWeight: 700 }}
+              >
+                That's me — pick my colour →
+              </motion.button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="colour-step"
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
+              <h1
+                style={{
+                  fontSize: "clamp(22px,5vw,28px)",
+                  fontWeight: 900,
+                  letterSpacing: "-0.025em",
+                  marginBottom: 8,
+                  color: "#f0f0f5",
+                }}
+              >
+                Pick your colour
+              </h1>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
+                This is your avatar. Classmates see it, not a photo. You can change it later.
+              </p>
 
-          {/* Gradient picker */}
-          <div style={{ marginBottom: "32px" }}>
-            <label style={{
-              display: "block",
-              fontSize: "11px",
-              fontWeight: "700",
-              color: "rgba(255,255,255,0.4)",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              marginBottom: "12px",
-            }}>
-              Choose your avatar color
-            </label>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(6, 1fr)",
-              gap: "10px",
-            }}>
-              {GRADIENTS.map((grad, i) => (
+              {/* Live preview */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "28px" }}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedGradient}
+                    initial={{ scale: 0.8, opacity: 0, rotate: -8 }}
+                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                    exit={{ scale: 0.8, opacity: 0, rotate: 8 }}
+                    transition={{ type: "spring", stiffness: 340, damping: 22 }}
+                    style={{
+                      padding: 5,
+                      borderRadius: "50%",
+                      background: `conic-gradient(${GRADIENTS[selectedGradient]}, ${GRADIENTS[selectedGradient]})`,
+                      boxShadow: "0 12px 48px rgba(0,0,0,0.45)",
+                    }}
+                  >
+                    <GradientAvatar
+                      gradient={selectedGradient}
+                      name={lockedName || "?"}
+                      size={108}
+                      border="4px solid #07070f"
+                    />
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Gradient grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(6, 1fr)",
+                  gap: "11px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 20,
+                  padding: "18px",
+                  marginBottom: 28,
+                }}
+              >
+                {GRADIENTS.map((grad, i) => (
+                  <motion.button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedGradient(i)}
+                    whileHover={{ scale: 1.16 }}
+                    whileTap={{ scale: 0.88 }}
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1",
+                      borderRadius: "50%",
+                      background: grad,
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      outline: "none",
+                      boxShadow:
+                        selectedGradient === i
+                          ? "0 0 0 3px #fff, 0 0 0 5.5px rgba(155,109,255,0.8)"
+                          : "0 3px 10px rgba(0,0,0,0.4)",
+                      transition: "box-shadow 0.15s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      position: "relative",
+                    }}
+                  >
+                    <AnimatePresence>
+                      {selectedGradient === i && (
+                        <motion.div
+                          key="check"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.18)",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
                 <motion.button
-                  key={i}
-                  type="button"
-                  onClick={() => setSelectedGradient(i)}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.92 }}
+                  onClick={() => setStep("name")}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
                   style={{
-                    width: "100%",
-                    aspectRatio: "1",
-                    borderRadius: "50%",
-                    background: grad,
-                    border: selectedGradient === i
-                      ? "3px solid rgba(255,255,255,0.9)"
-                      : "3px solid transparent",
+                    flex: 0,
+                    flexBasis: 52,
+                    padding: "16px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 14,
                     cursor: "pointer",
-                    padding: 0,
-                    boxShadow: selectedGradient === i
-                      ? "0 0 0 2px rgba(155,109,255,0.6), 0 4px 16px rgba(0,0,0,0.3)"
-                      : "0 2px 8px rgba(0,0,0,0.25)",
-                    transition: "border-color 0.15s, box-shadow 0.15s",
-                    position: "relative",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    color: "rgba(255,255,255,0.5)",
                   }}
                 >
-                  {selectedGradient === i && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  )}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
                 </motion.button>
-              ))}
-            </div>
-          </div>
 
-          {/* Error */}
-          <AnimatePresence>
-            {error && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                style={{
-                  color: "#ff4f7b",
-                  fontSize: "13px",
-                  marginBottom: "16px",
-                  padding: "10px 14px",
-                  background: "rgba(255,79,123,0.08)",
-                  borderRadius: "10px",
-                  border: "1px solid rgba(255,79,123,0.2)",
-                }}
-              >
-                {error}
-              </motion.p>
-            )}
-          </AnimatePresence>
-
-          <motion.button
-            type="submit"
-            className="btn-orchid"
-            disabled={submitting}
-            whileHover={{ scale: submitting ? 1 : 1.02 }}
-            whileTap={{ scale: submitting ? 1 : 0.98 }}
-            style={{ width: "100%", fontSize: "16px", padding: "15px", opacity: submitting ? 0.7 : 1 }}
-          >
-            {submitting ? "Saving..." : "Continue →"}
-          </motion.button>
-        </form>
+                <motion.button
+                  onClick={handleContinue}
+                  className="btn-orchid"
+                  disabled={submitting}
+                  whileHover={{ scale: submitting ? 1 : 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
+                  whileTap={{ scale: submitting ? 1 : 0.97 }}
+                  style={{ flex: 1, fontSize: "16px", padding: "16px", fontWeight: 700, opacity: submitting ? 0.7 : 1 }}
+                >
+                  {submitting ? "Saving…" : "Continue →"}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );

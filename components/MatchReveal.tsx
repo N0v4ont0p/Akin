@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 
@@ -13,6 +13,11 @@ interface MatchRevealProps {
   isAkin?: boolean;
 }
 
+// Deterministic "random" so SSR and client agree
+function seeded(seed: number, max: number) {
+  return ((seed * 1664525 + 1013904223) & 0x7fffffff) % max;
+}
+
 export default function MatchReveal({
   myGradient,
   myName,
@@ -21,32 +26,35 @@ export default function MatchReveal({
   onContinue,
   isAkin = false,
 }: MatchRevealProps) {
-  const [phase, setPhase] = useState<"shatter" | "bloom" | "reveal">("shatter");
+  const [phase, setPhase] = useState<"flash" | "rings" | "reveal">("flash");
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("bloom"), 700);
-    const t2 = setTimeout(() => setPhase("reveal"), 1400);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+    const t1 = setTimeout(() => setPhase("rings"), 320);
+    const t2 = setTimeout(() => setPhase("reveal"), 920);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const shatterPaths = {
-    initial: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
-    step1:
-      "polygon(2% 1%, 48% 0%, 52% 4%, 99% 1%, 98% 48%, 100% 53%, 97% 99%, 51% 97%, 49% 100%, 1% 98%, 0% 51%, 3% 47%)",
-    step2:
-      "polygon(8% 5%, 45% 1%, 58% 9%, 93% 4%, 96% 43%, 100% 58%, 91% 94%, 56% 90%, 44% 99%, 7% 92%, 1% 57%, 5% 43%)",
-    collapsed:
-      "polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%, 50% 50%)",
-  };
+  // Pre-compute particle positions using seed so they're stable
+  const particles = useMemo(() =>
+    Array.from({ length: 32 }, (_, i) => ({
+      id: i,
+      left: 10 + seeded(i * 7, 80),
+      top: 10 + seeded(i * 13, 80),
+      size: i % 4 === 0 ? 10 : i % 3 === 0 ? 7 : 5,
+      color: i % 3 === 0 ? "#9b6dff" : i % 3 === 1 ? "#00e5a0" : "#ff4f7b",
+      dx: (seeded(i * 3, 200) - 100),
+      dy: -(60 + seeded(i * 5, 160)),
+      dur: 1.8 + seeded(i * 11, 15) / 10,
+      delay: seeded(i * 17, 12) / 10,
+      isStar: i % 5 === 0,
+    })),
+  []);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      exit={{ opacity: 0, transition: { duration: 0.4 } }}
       style={{
         position: "fixed",
         inset: 0,
@@ -57,62 +65,62 @@ export default function MatchReveal({
         overflow: "hidden",
       }}
     >
-      {/* Dark base */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "rgba(7,7,15,0.97)",
-          zIndex: -1,
-        }}
-      />
+      {/* Deep background */}
+      <div style={{ position: "absolute", inset: 0, background: "#04040e", zIndex: 0 }} />
 
-      {/* Phase 1: Shatter overlay */}
+      {/* Phase 1: White flash */}
       <AnimatePresence>
-        {phase === "shatter" && (
+        {phase === "flash" && (
           <motion.div
-            key="shatter"
-            initial={{ clipPath: shatterPaths.initial, opacity: 1 }}
-            animate={{
-              clipPath: [
-                shatterPaths.initial,
-                shatterPaths.step1,
-                shatterPaths.step2,
-                shatterPaths.collapsed,
-              ],
-              opacity: [1, 1, 1, 0],
-            }}
-            transition={{
-              duration: 0.7,
-              times: [0, 0.3, 0.6, 1],
-              ease: "easeInOut",
-            }}
+            key="flash"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.7, 0] }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
             style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(7,7,15,1)",
-              zIndex: 2,
+              position: "absolute", inset: 0,
+              background: "white",
+              zIndex: 5,
+              pointerEvents: "none",
             }}
           />
         )}
       </AnimatePresence>
 
-      {/* Phase 2: Radial bloom */}
+      {/* Phase 2: Expanding shockwave rings */}
       <AnimatePresence>
-        {(phase === "bloom" || phase === "reveal") && (
+        {(phase === "rings" || phase === "reveal") &&
+          [0, 1, 2, 3].map((i) => (
+            <motion.div
+              key={`ring-${i}`}
+              initial={{ width: 0, height: 0, opacity: 0.9 }}
+              animate={{ width: 900, height: 900, opacity: 0 }}
+              transition={{ duration: 1.4, delay: i * 0.18, ease: "easeOut" }}
+              style={{
+                position: "absolute",
+                borderRadius: "50%",
+                border: `${2 - i * 0.3}px solid ${isAkin ? "rgba(155,109,255,0.6)" : "rgba(0,229,160,0.5)"}`,
+                zIndex: 1,
+                pointerEvents: "none",
+              }}
+            />
+          ))}
+      </AnimatePresence>
+
+      {/* Radial background glow */}
+      <AnimatePresence>
+        {(phase === "rings" || phase === "reveal") && (
           <motion.div
-            key="bloom"
-            initial={{ opacity: 0, scale: 0 }}
+            key="glow"
+            initial={{ opacity: 0, scale: 0.3 }}
             animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
             style={{
-              position: "absolute",
-              inset: 0,
+              position: "absolute", inset: 0, zIndex: 0,
               background: isAkin
-                ? "radial-gradient(circle at center, rgba(155,109,255,0.28) 0%, rgba(0,229,160,0.16) 35%, transparent 65%)"
-                : "radial-gradient(circle at center, rgba(155,109,255,0.20) 0%, rgba(0,229,160,0.12) 35%, transparent 65%)",
-              zIndex: 0,
+                ? "radial-gradient(ellipse 70% 55% at 50% 50%, rgba(155,109,255,0.32) 0%, rgba(0,229,160,0.14) 45%, transparent 70%)"
+                : "radial-gradient(ellipse 70% 55% at 50% 50%, rgba(0,229,160,0.25) 0%, rgba(155,109,255,0.12) 45%, transparent 70%)",
+              pointerEvents: "none",
             }}
-            transition={{ duration: 0.9, ease: "easeOut" }}
           />
         )}
       </AnimatePresence>
@@ -120,33 +128,35 @@ export default function MatchReveal({
       {/* Floating particles */}
       <AnimatePresence>
         {phase === "reveal" &&
-          Array.from({ length: 14 }, (_, i) => (
+          particles.map((p) => (
             <motion.div
-              key={i}
-              initial={{ opacity: 0.8, y: 0, x: 0 }}
+              key={p.id}
+              initial={{ opacity: 1, y: 0, x: 0, scale: 1, rotate: 0 }}
               animate={{
                 opacity: 0,
-                y: -180 - Math.random() * 100,
-                x: (Math.random() - 0.5) * 120,
-                rotate: 360,
+                y: p.dy,
+                x: p.dx,
+                scale: p.isStar ? [1, 1.4, 0] : [1, 0.6, 0],
+                rotate: p.isStar ? 360 : 0,
               }}
               transition={{
-                duration: 2 + Math.random() * 1.5,
-                delay: Math.random() * 1.2,
+                duration: p.dur,
+                delay: p.delay,
                 ease: "easeOut",
                 repeat: Infinity,
-                repeatDelay: 0.8,
+                repeatDelay: 1.2,
               }}
               style={{
                 position: "absolute",
-                left: `${10 + Math.random() * 80}%`,
-                top: `${20 + Math.random() * 60}%`,
-                width: i % 3 === 0 ? "8px" : "5px",
-                height: i % 3 === 0 ? "8px" : "5px",
-                borderRadius: "50%",
-                background: i % 2 === 0 ? "#9b6dff" : "#00e5a0",
-                zIndex: 2,
+                left: `${p.left}%`,
+                top: `${p.top}%`,
+                width: p.size,
+                height: p.size,
+                borderRadius: p.isStar ? "2px" : "50%",
+                background: p.color,
+                zIndex: 3,
                 pointerEvents: "none",
+                boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
               }}
             />
           ))}
@@ -157,182 +167,239 @@ export default function MatchReveal({
         {phase === "reveal" && (
           <motion.div
             key="content"
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{
-              type: "spring",
-              stiffness: 260,
-              damping: 26,
-              delay: 0.1,
-            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
             style={{
               position: "relative",
               zIndex: 10,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              padding: "40px 24px",
+              padding: "32px 24px",
               textAlign: "center",
-              maxWidth: "420px",
+              maxWidth: "440px",
               width: "100%",
             }}
           >
-            {/* Label */}
+            {/* Eyebrow label */}
             <motion.p
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.15, duration: 0.4 }}
               style={{
-                fontSize: "11px",
+                fontSize: 11,
                 fontWeight: 700,
                 textTransform: "uppercase",
-                letterSpacing: "0.22em",
-                color: "rgba(255,255,255,0.4)",
-                marginBottom: "14px",
+                letterSpacing: "0.28em",
+                color: "rgba(255,255,255,0.38)",
+                marginBottom: 14,
               }}
             >
-              {isAkin ? "akin match" : "new match"}
+              {isAkin ? "akin match" : "it's mutual"}
             </motion.p>
 
-            {/* Title */}
+            {/* Big title */}
             <motion.h1
-              initial={{ opacity: 0, scale: 0.75 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.3, type: "spring", stiffness: 280 }}
+              initial={{ opacity: 0, scale: 0.6, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 0.22, type: "spring", stiffness: 260, damping: 20 }}
               className="gradient-text-match"
               style={{
-                fontSize: "clamp(32px, 8vw, 48px)",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                marginBottom: "44px",
-                lineHeight: 1.1,
+                fontSize: "clamp(38px, 10vw, 58px)",
+                fontWeight: 900,
+                letterSpacing: "-0.035em",
+                marginBottom: 48,
+                lineHeight: 1.05,
               }}
             >
               {isAkin ? "✦ Akin ✦" : "It's a Match"}
             </motion.h1>
 
-            {/* Avatars */}
-            <motion.div
-              initial={{ scale: 0, rotate: -10 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ delay: 0.4, type: "spring", stiffness: 200, damping: 18 }}
+            {/* Avatars — come from sides */}
+            <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "20px",
-                marginBottom: "28px",
+                gap: 28,
+                marginBottom: 32,
+                position: "relative",
               }}
             >
-              <div
-                className="float-slow"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "10px",
+              {/* Connection glow behind avatars */}
+              <motion.div
+                animate={{
+                  opacity: [0.4, 0.9, 0.4],
+                  scaleX: [0.8, 1.2, 0.8],
                 }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: 180,
+                  height: 80,
+                  borderRadius: "50%",
+                  background: isAkin
+                    ? "radial-gradient(ellipse, rgba(155,109,255,0.5), transparent 70%)"
+                    : "radial-gradient(ellipse, rgba(0,229,160,0.4), transparent 70%)",
+                  filter: "blur(12px)",
+                  pointerEvents: "none",
+                }}
+              />
+
+              {/* Left avatar */}
+              <motion.div
+                initial={{ x: -80, opacity: 0, scale: 0.7 }}
+                animate={{ x: 0, opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3, type: "spring", stiffness: 220, damping: 18 }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}
               >
-                <GradientAvatar
-                  gradient={myGradient}
-                  name={myName}
-                  size={88}
-                  border="3px solid rgba(155,109,255,0.5)"
-                  style={{ boxShadow: "0 0 32px rgba(155,109,255,0.3)" }}
-                />
-                <span
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.8)",
+                <motion.div
+                  animate={{
+                    boxShadow: [
+                      "0 0 0 0 rgba(155,109,255,0)",
+                      "0 0 0 10px rgba(155,109,255,0.2)",
+                      "0 0 0 0 rgba(155,109,255,0)",
+                    ],
                   }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+                  style={{ borderRadius: "50%" }}
+                >
+                  <GradientAvatar
+                    gradient={myGradient}
+                    name={myName}
+                    size={96}
+                    border="3px solid rgba(155,109,255,0.6)"
+                    style={{ boxShadow: "0 0 40px rgba(155,109,255,0.35)" }}
+                  />
+                </motion.div>
+                <motion.span
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55 }}
+                  style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.85)" }}
                 >
                   {myName}
-                </span>
-              </div>
-
-              {/* Center icon */}
-              <motion.div
-                animate={isAkin ? { scale: [1, 1.3, 1], rotate: [0, 10, 0] } : { scale: [1, 1.2, 1] }}
-                transition={{ repeat: Infinity, duration: 1.6 }}
-              >
-                {isAkin ? (
-                  <span style={{ fontSize: "28px" }}>✦</span>
-                ) : (
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#00e5a0" stroke="none">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                  </svg>
-                )}
+                </motion.span>
               </motion.div>
 
-              <div
-                className="float-slow"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "10px",
-                  animationDelay: "0.5s",
-                }}
+              {/* Center symbol */}
+              <motion.div
+                initial={{ scale: 0, rotate: -30 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ delay: 0.5, type: "spring", stiffness: 300, damping: 16 }}
+                style={{ flexShrink: 0, zIndex: 2 }}
               >
-                <GradientAvatar
-                  gradient={matchGradient}
-                  name={matchName}
-                  size={88}
-                  border="3px solid rgba(0,229,160,0.5)"
-                  style={{ boxShadow: "0 0 32px rgba(0,229,160,0.3)" }}
-                />
-                <span
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.8)",
+                <motion.div
+                  animate={
+                    isAkin
+                      ? { scale: [1, 1.35, 1], rotate: [0, 15, -15, 0] }
+                      : { scale: [1, 1.25, 1] }
+                  }
+                  transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  {isAkin ? (
+                    <span
+                      style={{
+                        fontSize: 32,
+                        background: "linear-gradient(135deg, #9b6dff, #00e5a0)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                        filter: "drop-shadow(0 0 12px rgba(155,109,255,0.8))",
+                      }}
+                    >
+                      ✦
+                    </span>
+                  ) : (
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="#00e5a0" stroke="none"
+                      style={{ filter: "drop-shadow(0 0 10px rgba(0,229,160,0.8))" }}>
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                  )}
+                </motion.div>
+              </motion.div>
+
+              {/* Right avatar */}
+              <motion.div
+                initial={{ x: 80, opacity: 0, scale: 0.7 }}
+                animate={{ x: 0, opacity: 1, scale: 1 }}
+                transition={{ delay: 0.3, type: "spring", stiffness: 220, damping: 18 }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}
+              >
+                <motion.div
+                  animate={{
+                    boxShadow: [
+                      "0 0 0 0 rgba(0,229,160,0)",
+                      "0 0 0 10px rgba(0,229,160,0.2)",
+                      "0 0 0 0 rgba(0,229,160,0)",
+                    ],
                   }}
+                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                  style={{ borderRadius: "50%" }}
+                >
+                  <GradientAvatar
+                    gradient={matchGradient}
+                    name={matchName}
+                    size={96}
+                    border="3px solid rgba(0,229,160,0.6)"
+                    style={{ boxShadow: "0 0 40px rgba(0,229,160,0.35)" }}
+                  />
+                </motion.div>
+                <motion.span
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55 }}
+                  style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.85)" }}
                 >
                   {matchName}
-                </span>
-              </div>
-            </motion.div>
+                </motion.span>
+              </motion.div>
+            </div>
 
             {/* Subtitle */}
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.65 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
               style={{
-                fontSize: "15px",
-                color: "rgba(255,255,255,0.4)",
-                marginBottom: "48px",
-                lineHeight: 1.6,
+                fontSize: 15,
+                color: "rgba(255,255,255,0.42)",
+                marginBottom: 52,
+                lineHeight: 1.65,
+                maxWidth: 300,
               }}
             >
               {isAkin
-                ? "You both chose each other. One pick. Mutual truth."
-                : "You both liked each other."}
+                ? "You chose each other — no one else. One pick. Mutual truth."
+                : "Both of you liked each other at the same time."}
             </motion.p>
 
-            {/* Continue button */}
+            {/* CTA */}
             <motion.button
               onClick={onContinue}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              whileHover={{ scale: 1.04 }}
+              transition={{ delay: 0.88, type: "spring", stiffness: 260, damping: 24 }}
+              whileHover={{ scale: 1.04, boxShadow: "0 16px 52px rgba(155,109,255,0.55)" }}
               whileTap={{ scale: 0.96 }}
               style={{
                 background: "linear-gradient(135deg, #9b6dff, #6d3bff)",
                 color: "white",
                 border: "none",
-                borderRadius: "14px",
-                padding: "15px 48px",
-                fontSize: "16px",
-                fontWeight: 600,
+                borderRadius: 16,
+                padding: "16px 56px",
+                fontSize: 16,
+                fontWeight: 700,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                boxShadow: "0 12px 40px rgba(155,109,255,0.45)",
+                boxShadow: "0 12px 44px rgba(155,109,255,0.48)",
                 letterSpacing: "0.01em",
               }}
             >
-              Keep going
+              See your matches →
             </motion.button>
           </motion.div>
         )}

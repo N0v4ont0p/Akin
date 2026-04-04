@@ -12,6 +12,7 @@ import {
   Timestamp,
   updateDoc,
   increment,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -92,6 +93,8 @@ export interface UserProfile {
   // Akin pick fields
   akinPickId?: string | null;
   akinPickedAt?: Timestamp | null;
+  refrostUntil?: Timestamp | null;
+  sharedSecret?: string;
 }
 
 export interface LikeData {
@@ -494,4 +497,101 @@ export function formatRelativeTime(timestamp: Timestamp | null): string {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   return `${days}d ago`;
+}
+
+// ─── Refrost / Burning Bridge ────────────────────────────────────────────────
+
+export async function releaseAkinPick(userId: string, classId: string): Promise<void> {
+  const REFROST_MS = 24 * 60 * 60 * 1000;
+  const refrostUntil = Timestamp.fromMillis(Date.now() + REFROST_MS);
+  const pickDocId = `${userId}_${classId}`;
+  try {
+    await deleteDoc(doc(db, "akin_picks", pickDocId));
+  } catch { /* non-critical */ }
+  await updateDoc(doc(db, "users", userId), {
+    akinPickId: null,
+    akinPickedAt: null,
+    refrostUntil,
+  });
+}
+
+export function subscribeToUserDoc(
+  userId: string,
+  callback: (profile: UserProfile | null) => void
+): Unsubscribe {
+  return onSnapshot(doc(db, "users", userId), (snap) => {
+    if (!snap.exists()) { callback(null); return; }
+    callback({ userId, ...(snap.data() as Omit<UserProfile, "userId">) });
+  });
+}
+
+// ─── Sync Streak / Match Tiers ───────────────────────────────────────────────
+
+export type MatchTier = "match" | "recognition" | "bond";
+
+export function getMatchTierProgress(createdAt: Timestamp | null): {
+  tier: MatchTier;
+  progressToNext: number;
+  msToNext: number;
+  ageMs: number;
+} {
+  if (!createdAt) return { tier: "match", progressToNext: 0, msToNext: 86400000, ageMs: 0 };
+  const ageMs = Date.now() - createdAt.toMillis();
+  const h24 = 86400000;
+  const h72 = 259200000;
+  if (ageMs >= h72) return { tier: "bond", progressToNext: 1, msToNext: 0, ageMs };
+  if (ageMs >= h24) return { tier: "recognition", progressToNext: (ageMs - h24) / (h72 - h24), msToNext: h72 - ageMs, ageMs };
+  return { tier: "match", progressToNext: ageMs / h24, msToNext: h24 - ageMs, ageMs };
+}
+
+export async function updateSharedSecret(userId: string, secret: string): Promise<void> {
+  await updateDoc(doc(db, "users", userId), { sharedSecret: secret.trim() });
+}
+
+// ─── Vibe Checks ─────────────────────────────────────────────────────────────
+
+export interface VibeCheck {
+  id: string;
+  classId: string;
+  question: string;
+  options: Array<{ emoji: string; label: string }>;
+  responses: Record<string, number>;
+  date: string;
+  createdAt: Timestamp | null;
+}
+
+const VIBE_PROMPTS = [
+  { question: "What's the energy in class today?", options: [{ emoji: "⚡", label: "Charged" }, { emoji: "😴", label: "Sleepy" }, { emoji: "🔥", label: "On fire" }, { emoji: "🌊", label: "Flowing" }] },
+  { question: "How are people feeling right now?", options: [{ emoji: "😌", label: "Chill" }, { emoji: "😤", label: "Stressed" }, { emoji: "🥳", label: "Hyped" }, { emoji: "🤔", label: "In thought" }] },
+  { question: "What's the vibe check?", options: [{ emoji: "✨", label: "Magical" }, { emoji: "🥱", label: "Dragging" }, { emoji: "💥", label: "Explosive" }, { emoji: "🫶", label: "Warm" }] },
+  { question: "Rate the room's mood:", options: [{ emoji: "🧊", label: "Ice cold" }, { emoji: "😎", label: "Cool" }, { emoji: "☀️", label: "Sunny" }, { emoji: "🌪️", label: "Chaotic" }] },
+  { question: "What's the collective feeling?", options: [{ emoji: "🎯", label: "Focused" }, { emoji: "💤", label: "Out of it" }, { emoji: "🎉", label: "Celebrating" }, { emoji: "🫠", label: "Melting" }] },
+  { question: "Class vibe right now?", options: [{ emoji: "🧠", label: "Big brain" }, { emoji: "😵", label: "Overwhelmed" }, { emoji: "🕺", label: "Vibing" }, { emoji: "🫥", label: "Ghosted" }] },
+  { question: "How charged is the room?", options: [{ emoji: "💯", label: "Maxed out" }, { emoji: "🔋", label: "Draining" }, { emoji: "⚡", label: "Sparking" }, { emoji: "😶", label: "Neutral" }] },
+];
+
+export async function createOrFetchDailyVibeCheck(classId: string): Promise<VibeCheck> {
+  const today = new Date().toISOString().slice(0, 10);
+  const docId = `${classId}_${today}`;
+  const ref = doc(db, "vibe_checks", docId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) return { id: snap.id, ...(snap.data() as Omit<VibeCheck, "id">) };
+  const dayOfWeek = new Date().getDay();
+  const prompt = VIBE_PROMPTS[dayOfWeek % VIBE_PROMPTS.length];
+  const data = { classId, question: prompt.question, options: prompt.options, responses: {}, date: today, createdAt: serverTimestamp() };
+  await setDoc(ref, data);
+  return { id: docId, ...data, createdAt: null };
+}
+
+export async function submitVibeResponse(checkId: string, userId: string, optionIndex: number): Promise<void> {
+  await updateDoc(doc(db, "vibe_checks", checkId), { [`responses.${userId}`]: optionIndex });
+}
+
+export function subscribeToVibeCheck(classId: string, callback: (check: VibeCheck | null) => void): Unsubscribe {
+  const today = new Date().toISOString().slice(0, 10);
+  const docId = `${classId}_${today}`;
+  return onSnapshot(doc(db, "vibe_checks", docId), (snap) => {
+    if (!snap.exists()) { callback(null); return; }
+    callback({ id: snap.id, ...(snap.data() as Omit<VibeCheck, "id">) });
+  });
 }

@@ -30,20 +30,24 @@
   --radius-btn: 14px;
 }
 
-/* Privacy mode overrides */
-[data-privacy="true"] {
+/* Privacy mode overrides — full-page light mode */
+[data-privacy="true"],
+[data-privacy="true"] body,
+[data-privacy="true"] main {
   --bg: #f5f5f0;
-  --surface: rgba(0,0,0,0.03);
-  --surface-2: rgba(0,0,0,0.05);
-  --border: rgba(0,0,0,0.08);
-  --border-bright: rgba(0,0,0,0.14);
+  --surface: rgba(0,0,0,0.04);
+  --surface-2: rgba(0,0,0,0.06);
+  --border: rgba(0,0,0,0.09);
+  --border-bright: rgba(0,0,0,0.15);
   --text: #1a1a1a;
   --text-muted: rgba(0,0,0,0.45);
   --text-dim: rgba(0,0,0,0.25);
-  --orchid: #888;
-  --orchid-dim: rgba(136,136,136,0.15);
-  --mint: #555;
-  --mint-dim: rgba(85,85,85,0.10);
+  --orchid: #777;
+  --orchid-dim: rgba(120,120,120,0.12);
+  --mint: #444;
+  --mint-dim: rgba(68,68,68,0.08);
+  background: #f5f5f0;
+  color: #1a1a1a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -390,8 +394,81 @@ input.input-glass::placeholder {
   50%       { opacity: 0.9; transform: scale(1.2); }
 }
 
-/* Privacy mode: disable animations */
+/* Privacy mode: disable animations, force light bg everywhere */
 [data-privacy="true"] * {
   animation-duration: 0.001ms !important;
   transition-duration: 0.001ms !important;
 }
+[data-privacy="true"] .orb {
+  display: none !important;
+}
+[data-privacy="true"] .glass,
+[data-privacy="true"] .glass-strong,
+[data-privacy="true"] .glass-card {
+  background: rgba(0,0,0,0.04) !important;
+  border-color: rgba(0,0,0,0.09) !important;
+}
+
+/* ── Extra micro-animations ──────────────────────────── */
+@keyframes pop-in {
+  0%   { transform: scale(0.6) rotate(-6deg); opacity: 0; }
+  70%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.pop-in { animation: pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slide-up 0.35s ease-out forwards; }
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(155,109,255,0.25); }
+  50%       { box-shadow: 0 0 48px rgba(155,109,255,0.6); }
+}
+.glow-pulse { animation: glow-pulse 2.4s ease-in-out infinite; }
+
+/* Smooth nav label transition */
+.nav-label {
+  transition: color 0.22s ease, font-weight 0.22s ease;
+}
+
+/* ── Usage Loop animations ───────────────────────────── */
+
+/* Shatter-and-Bloom: radial mask sweep for Sync Streak bond reveal */
+@keyframes shatter-bloom {
+  0%   { clip-path: circle(0% at 50% 50%); opacity: 1; }
+  100% { clip-path: circle(150% at 50% 50%); opacity: 0; }
+}
+.shatter-bloom {
+  animation: shatter-bloom 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Refrost ice pulse */
+@keyframes ice-pulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(137,247,254,0.15), inset 0 0 40px rgba(137,247,254,0.04); }
+  50%       { box-shadow: 0 0 48px rgba(137,247,254,0.35), inset 0 0 80px rgba(137,247,254,0.10); }
+}
+.ice-pulse { animation: ice-pulse 3s ease-in-out infinite; }
+
+/* Tier reveal glow */
+@keyframes tier-bloom {
+  0%   { opacity: 0; transform: scale(0.6); filter: blur(12px); }
+  60%  { opacity: 1; transform: scale(1.08); filter: blur(0px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+}
+.tier-bloom { animation: tier-bloom 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* Vibe check bar fill */
+@keyframes bar-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Slide-to-lock shimmer */
+@keyframes slide-shimmer {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+.slide-shimmer { animation: slide-shimmer 2s ease-in-out infinite; }

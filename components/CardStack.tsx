@@ -10,10 +10,13 @@ import {
 } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 import { UserProfile } from "@/lib/firestore";
+import AkinConfirm from "./AkinConfirm";
 
 interface CardStackProps {
   classmates: UserProfile[];
   alreadyLiked: Set<string>;
+  myName: string;
+  myGradient: number;
   onLike: (classmate: UserProfile) => Promise<void>;
   onPass: (classmate: UserProfile) => void;
   onAkinPick?: (classmate: UserProfile) => Promise<void>;
@@ -30,9 +33,16 @@ interface DraggableCardProps {
 function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardProps) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-22, 22]);
-  const likeOpacity = useTransform(x, [30, 100], [0, 1]);
-  const passOpacity = useTransform(x, [-100, -30], [1, 0]);
+  const likeOpacity = useTransform(x, [14, 80], [0, 1]);
+  const passOpacity = useTransform(x, [-80, -14], [1, 0]);
   const cardOpacity = useTransform(x, [-220, -180, 0, 180, 220], [0, 1, 1, 1, 0]);
+
+  // ── Magnetic Pull transforms ──────────────────────────────────────
+  // Card subtly stretches toward the Akin side and compresses away from pass
+  const magneticScaleX = useTransform(x, [-200, -60, 0, 60, 200], [0.96, 0.98, 1, 1.03, 1.06]);
+  const magneticSkewX = useTransform(x, [-120, 0, 120], [-2.5, 0, 2.5]);
+  // The card "leans" toward whichever direction
+  const magneticY = useTransform(x, [-200, 0, 200], [4, 0, -4]);
 
   const handleDragEnd = (_: unknown, info: { offset: { x: number } }) => {
     if (info.offset.x > 90) onLike();
@@ -61,7 +71,7 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
         />
       )}
 
-      {/* Main draggable card */}
+      {/* Main draggable card — outer wrapper handles x/rotate/opacity */}
       <motion.div
         style={{ x, rotate, opacity: cardOpacity, position: "relative", zIndex: 1 }}
         drag="x"
@@ -69,9 +79,10 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
         dragElastic={0.7}
         onDragEnd={handleDragEnd}
         whileTap={{ cursor: "grabbing" }}
-        whileHover={{ scale: 1.01 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
+      {/* Inner wrapper applies Magnetic Pull warp */}
+      <motion.div style={{ scaleX: magneticScaleX, skewX: magneticSkewX, y: magneticY }}>
         {/* Like indicator */}
         <motion.div
           style={{
@@ -258,6 +269,8 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
           </div>
         </div>
       </motion.div>
+      {/* close magnetic inner wrapper */}
+      </motion.div>
     </div>
   );
 }
@@ -266,6 +279,8 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
 export default function CardStack({
   classmates,
   alreadyLiked,
+  myName,
+  myGradient,
   onLike,
   onPass,
   onAkinPick,
@@ -276,6 +291,7 @@ export default function CardStack({
   const [cardKey, setCardKey] = useState(0);
   const [isShivering, setIsShivering] = useState(false);
   const [showRipple, setShowRipple] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<UserProfile | null>(null);
   const [scope, animate] = useAnimate();
 
   useEffect(() => {
@@ -298,14 +314,22 @@ export default function CardStack({
     setShowRipple(false);
   };
 
-  const handleLike = async () => {
+  const handleLike = () => {
     if (!current || animating) return;
+    // Show confirm modal instead of immediately picking
+    setConfirmTarget(current);
+  };
+
+  const handleConfirmAkin = async () => {
+    if (!confirmTarget) return;
+    const target = confirmTarget;
+    setConfirmTarget(null);
     setAnimating("like");
     setShowRipple(true);
     setIsShivering(true);
     setTimeout(() => setIsShivering(false), 380);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(40);
-    await (onAkinPick ?? onLike)(current);
+    await (onAkinPick ?? onLike)(target);
     setTimeout(advance, 680);
   };
 
@@ -538,6 +562,15 @@ export default function CardStack({
           {queue.length - 1} more
         </p>
       )}
+
+      {/* Akin confirmation modal */}
+      <AkinConfirm
+        target={confirmTarget}
+        myName={myName}
+        myGradient={myGradient}
+        onConfirm={handleConfirmAkin}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </motion.div>
   );
 }

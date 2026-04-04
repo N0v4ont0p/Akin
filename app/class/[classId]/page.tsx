@@ -7,11 +7,13 @@ import { useUser } from "@/providers/UserProvider";
 import { usePrivacyMode } from "@/providers/PrivacyModeProvider";
 import CardStack from "@/components/CardStack";
 import MatchesList from "@/components/MatchesList";
-import Navigation from "@/components/Navigation";
+import Navigation, { NavTab } from "@/components/Navigation";
 import MatchReveal from "@/components/MatchReveal";
 import AkinSlot from "@/components/AkinSlot";
 import ProfileSheet from "@/components/ProfileSheet";
-import GradientAvatar from "@/components/GradientAvatar";
+import RefrostOverlay from "@/components/RefrostOverlay";
+import VibeCheckSheet from "@/components/VibeCheckSheet";
+import { Timestamp } from "firebase/firestore";
 import {
   getClass,
   getClassmates,
@@ -20,12 +22,16 @@ import {
   subscribeToMatches,
   updateUserProfile,
   leaveClass,
+  releaseAkinPick,
+  subscribeToUserDoc,
+  createOrFetchDailyVibeCheck,
+  submitVibeResponse,
+  subscribeToVibeCheck,
   ClassData,
   UserProfile,
   MatchData,
+  VibeCheck,
 } from "@/lib/firestore";
-
-type Tab = "browse" | "matches" | "profile";
 
 interface PendingMatch {
   matchGradient: number;
@@ -44,13 +50,19 @@ export default function ClassPage() {
   const [classmates, setClassmates] = useState<UserProfile[]>([]);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [matches, setMatches] = useState<MatchData[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>("browse");
+  const [activeTab, setActiveTab] = useState<NavTab>("browse");
   const [pageLoading, setPageLoading] = useState(true);
   const [pendingMatch, setPendingMatch] = useState<PendingMatch | null>(null);
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [cooldownToast, setCooldownToast] = useState("");
+  // Profile sheet is FULLY SEPARATE from activeTab — fixes the tab-switching bug
   const [showProfile, setShowProfile] = useState(false);
+  // Burning Bridge — refrost state
+  const [refrostUntil, setRefrostUntil] = useState<Date | null>(null);
+  // Vibe Check
+  const [vibeCheck, setVibeCheck] = useState<VibeCheck | null>(null);
+  const [vibeCheckLoading, setVibeCheckLoading] = useState(true);
 
   const previousMatchIds = useRef<Set<string>>(new Set());
   const isFirstMatchLoad = useRef(true);
@@ -124,6 +136,47 @@ export default function ClassPage() {
     return unsub;
   }, [user, classId]);
 
+  // ── Refrost / Burning Bridge — subscribe to own user doc ────────────────
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToUserDoc(user.uid, (updatedProfile) => {
+      if (updatedProfile?.refrostUntil) {
+        const d = (updatedProfile.refrostUntil as Timestamp).toDate();
+        setRefrostUntil(d.getTime() > Date.now() ? d : null);
+      } else {
+        setRefrostUntil(null);
+      }
+    });
+    return unsub;
+  }, [user]);
+
+  // ── Vibe Check — create/fetch today's check + subscribe ─────────────────
+  useEffect(() => {
+    if (!classId) return;
+    setVibeCheckLoading(true);
+    createOrFetchDailyVibeCheck(classId)
+      .then((check) => {
+        setVibeCheck(check);
+        setVibeCheckLoading(false);
+      })
+      .catch(() => setVibeCheckLoading(false));
+    const unsub = subscribeToVibeCheck(classId, (check) => {
+      setVibeCheck(check);
+    });
+    return unsub;
+  }, [classId]);
+
+  const handleVibeVote = useCallback(async (optionIndex: number) => {
+    if (!user || !vibeCheck) return;
+    await submitVibeResponse(vibeCheck.id, user.uid, optionIndex);
+  }, [user, vibeCheck]);
+
+  const handleReleasePick = useCallback(async () => {
+    if (!user) return;
+    await releaseAkinPick(user.uid, classId);
+    showToast("Pick released — feed frosted for 24 hours ❄️");
+  }, [user, classId]);
+
   const handleAkinPick = useCallback(async (classmate: UserProfile) => {
     if (!user || !profile) return;
     try {
@@ -140,7 +193,7 @@ export default function ClassPage() {
         setTimeout(() => setCooldownToast(""), 4000);
       } else {
         setLikedIds((prev) => new Set([...prev, classmate.userId]));
-        showToast(`You picked ${classmate.name} as your Akin`);
+        showToast(`You picked ${classmate.name} as your Akin ✦`);
       }
     } catch (err) {
       console.error("Akin pick failed:", err);
@@ -160,14 +213,6 @@ export default function ClassPage() {
     await leaveClass(user.uid);
     window.location.href = "/setup";
   }, [user]);
-
-  // Open profile sheet when profile tab is tapped
-  useEffect(() => {
-    if (activeTab === "profile") {
-      setShowProfile(true);
-      setActiveTab("browse");
-    }
-  }, [activeTab]);
 
   if (userLoading || pageLoading) {
     return (
@@ -194,25 +239,33 @@ export default function ClassPage() {
     );
   }
 
+  const headerBg = privacyMode
+    ? "rgba(240,240,234,0.96)"
+    : "rgba(8,8,18,0.92)";
+  const headerBorder = privacyMode
+    ? "rgba(0,0,0,0.08)"
+    : "rgba(255,255,255,0.07)";
+
   return (
-    <div style={{ minHeight: "100vh", paddingBottom: "110px" }}>
-      {/* Header */}
+    <div style={{ minHeight: "100vh", paddingBottom: "112px" }}>
+      {/* ── Header ──────────────────────────────────────── */}
       <div
         style={{
           position: "sticky",
           top: 0,
           zIndex: 50,
-          padding: "12px 20px",
+          padding: "11px 18px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          background: privacyMode ? "rgba(245,245,240,0.92)" : "rgba(7,7,15,0.85)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          borderBottom: `1px solid ${privacyMode ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.06)"}`,
+          background: headerBg,
+          backdropFilter: "blur(28px)",
+          WebkitBackdropFilter: "blur(28px)",
+          borderBottom: `1px solid ${headerBorder}`,
+          transition: "background 0.4s ease, border-color 0.4s ease",
         }}
       >
-        {/* Left: logo + breadcrumb */}
+        {/* Left: logo + class breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -224,7 +277,7 @@ export default function ClassPage() {
             {classData?.schoolName && (
               <p style={{
                 fontSize: "10px",
-                color: privacyMode ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.35)",
+                color: privacyMode ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.32)",
                 fontWeight: "600",
                 marginBottom: "1px",
                 letterSpacing: "0.02em",
@@ -243,50 +296,13 @@ export default function ClassPage() {
           </div>
         </div>
 
-        {/* Right: privacy + match badge + avatar */}
+        {/* Right: privacy toggle + match badge */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {/* Privacy toggle */}
-          <motion.button
-            onClick={togglePrivacy}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.92 }}
-            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "50%",
-              background: privacyMode ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.07)",
-              border: `1px solid ${privacyMode ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)"}`,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: privacyMode ? "#666" : "rgba(255,255,255,0.5)",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {privacyMode ? (
-                <>
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </>
-              ) : (
-                <>
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </>
-              )}
-            </svg>
-          </motion.button>
-
-          {/* Match badge */}
-          {matches.length > 0 && !privacyMode && (
+          {matches.length > 0 && (
             <motion.button
               onClick={() => setActiveTab("matches")}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -299,53 +315,91 @@ export default function ClassPage() {
                 fontFamily: "inherit",
               }}
             >
-              <div className="pulse-dot" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--mint)" }} />
+              <motion.div
+                animate={{ scale: [1, 1.3, 1] }}
+                transition={{ repeat: Infinity, duration: 1.8 }}
+                style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--mint)" }}
+              />
               <span style={{ fontSize: "12px", color: "var(--mint)", fontWeight: "700" }}>
                 {matches.length}
               </span>
             </motion.button>
           )}
 
-          {/* Profile avatar tap → open profile sheet */}
-          {profile && !privacyMode && (
-            <motion.button
-              onClick={() => setShowProfile(true)}
-              whileHover={{ scale: 1.06 }}
-              whileTap={{ scale: 0.93 }}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-            >
-              <GradientAvatar
-                gradient={profile.avatarGradient ?? 0}
-                name={profile.name}
-                size={32}
-                border="2px solid rgba(155,109,255,0.45)"
-              />
-            </motion.button>
-          )}
+          {/* Privacy toggle */}
+          <motion.button
+            onClick={togglePrivacy}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
+            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
+            style={{
+              width: "34px",
+              height: "34px",
+              borderRadius: "50%",
+              background: privacyMode ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.07)",
+              border: `1px solid ${privacyMode ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)"}`,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: privacyMode ? "#555" : "rgba(255,255,255,0.5)",
+              transition: "all 0.25s ease",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {privacyMode ? (
+                <>
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </>
+              ) : (
+                <>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              )}
+            </svg>
+          </motion.button>
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* ── Tab content ─────────────────────────────────── */}
       <AnimatePresence mode="wait">
         {activeTab === "browse" && (
           <motion.div
             key="browse"
-            initial={{ opacity: 0, x: -16 }}
+            initial={{ opacity: 0, x: -18 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
-            transition={{ duration: 0.22 }}
+            exit={{ opacity: 0, x: 18 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <div style={{ padding: "20px 20px 0" }}>
-              {!privacyMode && <AkinSlot akinPick={akinPick} />}
+            <div style={{ padding: "18px 18px 0" }}>
+              {!privacyMode && (
+                <AkinSlot
+                  akinPick={akinPick}
+                  onReleasePick={handleReleasePick}
+                />
+              )}
             </div>
-            <div style={{ paddingTop: "16px" }}>
+            {/* Browse content — wrapped in a relative container for RefrostOverlay */}
+            <div style={{ paddingTop: "14px", position: "relative" }}>
               <CardStack
                 classmates={classmates}
                 alreadyLiked={likedIds}
+                myName={profile?.name ?? "?"}
+                myGradient={profile?.avatarGradient ?? 0}
                 onLike={handleAkinPick}
                 onPass={handlePass}
                 onAkinPick={handleAkinPick}
               />
+              {/* Burning Bridge — RefrostOverlay sits over the card stack */}
+              {!privacyMode && (
+                <RefrostOverlay
+                  refrostUntil={refrostUntil}
+                  onExpired={() => setRefrostUntil(null)}
+                />
+              )}
             </div>
           </motion.div>
         )}
@@ -353,40 +407,114 @@ export default function ClassPage() {
         {activeTab === "matches" && (
           <motion.div
             key="matches"
-            initial={{ opacity: 0, x: 16 }}
+            initial={{ opacity: 0, x: 18 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.22 }}
+            exit={{ opacity: 0, x: -18 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
           >
-            <div style={{ paddingTop: "24px" }}>
-              <div style={{ padding: "0 20px 20px" }}>
-                <h2 style={{
-                  fontSize: "26px",
-                  fontWeight: "800",
-                  letterSpacing: "-0.025em",
-                  marginBottom: "4px",
-                  color: privacyMode ? "#1a1a1a" : "#f0f0f5",
-                }}>
-                  {privacyMode ? "Notes" : "Your Matches"}
+            {/* Matches shrine header */}
+            {!privacyMode && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                style={{
+                  padding: "28px 24px 20px",
+                  textAlign: "center",
+                  position: "relative",
+                }}
+              >
+                {/* Ambient glow */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 280,
+                    height: 100,
+                    background: "radial-gradient(ellipse, rgba(155,109,255,0.15) 0%, transparent 70%)",
+                    filter: "blur(20px)",
+                    pointerEvents: "none",
+                  }}
+                />
+                <motion.div
+                  animate={{ scale: [1, 1.22, 1], filter: ["drop-shadow(0 0 6px rgba(155,109,255,0.4))", "drop-shadow(0 0 18px rgba(155,109,255,0.9))", "drop-shadow(0 0 6px rgba(155,109,255,0.4))"] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                  style={{
+                    fontSize: 28,
+                    background: "linear-gradient(135deg, #9b6dff, #00e5a0)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    marginBottom: 8,
+                    display: "block",
+                    position: "relative",
+                  }}
+                >
+                  ✦
+                </motion.div>
+                <h2
+                  style={{
+                    fontSize: "24px",
+                    fontWeight: "900",
+                    letterSpacing: "-0.03em",
+                    marginBottom: 4,
+                    color: "#f0f0f5",
+                    position: "relative",
+                  }}
+                >
+                  {matches.length === 0 ? "Your Matches" : matches.length === 1 ? "Your Match" : `${matches.length} Matches`}
                 </h2>
                 {matches.length > 0 && (
-                  <p style={{ color: privacyMode ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.35)", fontSize: "14px" }}>
-                    {privacyMode
-                      ? `${matches.length} item${matches.length !== 1 ? "s" : ""}`
-                      : `${matches.length} mutual connection${matches.length !== 1 ? "s" : ""}`}
+                  <p
+                    style={{
+                      color: "rgba(255,255,255,0.32)",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      position: "relative",
+                    }}
+                  >
+                    mutual · exclusive · real
                   </p>
                 )}
+              </motion.div>
+            )}
+
+            {privacyMode && (
+              <div style={{ paddingTop: "22px", padding: "22px 18px 10px" }}>
+                <h2 style={{ fontSize: "22px", fontWeight: "800", color: "#1a1a1a" }}>
+                  Notes ({matches.length})
+                </h2>
               </div>
-              <MatchesList matches={matches} myUserId={user?.uid ?? ""} />
-            </div>
+            )}
+
+            {/* Vibe Check — daily anonymous class pulse */}
+            {!privacyMode && user && (
+              <VibeCheckSheet
+                vibeCheck={vibeCheck}
+                myUserId={user.uid}
+                onVote={handleVibeVote}
+                loading={vibeCheckLoading}
+              />
+            )}
+
+            <MatchesList matches={matches} myUserId={user?.uid ?? ""} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Navigation */}
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} matchCount={matches.length} />
+      {/* ── Navigation ──────────────────────────────────── */}
+      <Navigation
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        matchCount={matches.length}
+        onProfileTap={() => setShowProfile(true)}
+        myGradient={profile?.avatarGradient ?? 0}
+        myName={profile?.name ?? "?"}
+      />
 
-      {/* Toasts */}
+      {/* ── Toasts ──────────────────────────────────────── */}
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -408,7 +536,7 @@ export default function ClassPage() {
             exit={{ opacity: 0, y: 8 }}
             style={{
               position: "fixed",
-              bottom: "100px",
+              bottom: "108px",
               left: "50%",
               transform: "translateX(-50%)",
               background: "rgba(155,109,255,0.12)",
@@ -431,7 +559,7 @@ export default function ClassPage() {
         )}
       </AnimatePresence>
 
-      {/* Match Reveal overlay */}
+      {/* ── Match Reveal ────────────────────────────────── */}
       <AnimatePresence>
         {pendingMatch && profile && (
           <MatchReveal
@@ -448,7 +576,7 @@ export default function ClassPage() {
         )}
       </AnimatePresence>
 
-      {/* Profile Sheet */}
+      {/* ── Profile Sheet ───────────────────────────────── */}
       <AnimatePresence>
         {showProfile && profile && (
           <ProfileSheet

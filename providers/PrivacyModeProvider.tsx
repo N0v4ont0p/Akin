@@ -20,6 +20,20 @@ export function PrivacyModeProvider({ children }: { children: ReactNode }) {
     if (stored === "1") setPrivacyMode(true);
   }, []);
 
+  // Sync background colour on <html> so the full page changes, not just a div
+  useEffect(() => {
+    const root = document.documentElement;
+    if (privacyMode) {
+      root.style.background = "#f5f5f0";
+      document.body.style.background = "#f5f5f0";
+      root.style.colorScheme = "light";
+    } else {
+      root.style.background = "#07070f";
+      document.body.style.background = "#07070f";
+      root.style.colorScheme = "dark";
+    }
+  }, [privacyMode]);
+
   const toggle = () => {
     setPrivacyMode((p) => {
       localStorage.setItem("akin_privacy", p ? "0" : "1");
@@ -29,7 +43,14 @@ export function PrivacyModeProvider({ children }: { children: ReactNode }) {
 
   return (
     <PrivacyModeContext.Provider value={{ privacyMode, toggle }}>
-      <div data-privacy={privacyMode.toString()} style={{ minHeight: "100vh" }}>
+      <div
+        data-privacy={privacyMode.toString()}
+        style={{
+          minHeight: "100vh",
+          background: privacyMode ? "#f5f5f0" : "transparent",
+          transition: "background 0.4s ease",
+        }}
+      >
         {children}
       </div>
     </PrivacyModeContext.Provider>
