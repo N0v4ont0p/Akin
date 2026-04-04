@@ -78,6 +78,8 @@ export default function AkinConfirm({
                 borderBottom: "none",
                 boxShadow: "0 -28px 80px rgba(155,109,255,0.3), 0 -4px 40px rgba(0,0,0,0.7)",
                 overflow: "hidden",
+                maxHeight: "93vh",
+                overflowY: "auto",
                 paddingBottom: "max(32px, env(safe-area-inset-bottom))",
               }}
             >

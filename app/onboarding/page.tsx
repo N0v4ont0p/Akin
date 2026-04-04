@@ -7,12 +7,44 @@ import { useUser } from "@/providers/UserProvider";
 import GradientAvatar from "@/components/GradientAvatar";
 import { GRADIENTS } from "@/lib/firestore";
 
+type Step = "name" | "gender" | "colour" | "features";
+type Gender = "male" | "female" | "other";
+
+const STEPS: Step[] = ["name", "gender", "colour", "features"];
+
+const FEATURE_SLIDES = [
+  {
+    icon: "✦",
+    iconColor: "#9b6dff",
+    glowColor: "rgba(155,109,255,0.35)",
+    heading: "One Akin. That's it.",
+    body: "You get one pick in your class. Not ten. Not unlimited. One. Choose the person who just gets it.",
+  },
+  {
+    icon: "❄️",
+    iconColor: "#00e5ff",
+    glowColor: "rgba(0,229,255,0.30)",
+    heading: "Matches reveal over time",
+    body: "When you and someone both pick each other, your connection unfolds in 3 stages over 72 hours. No instant gratification.",
+  },
+  {
+    icon: "⚡",
+    iconColor: "#fee140",
+    glowColor: "rgba(254,225,64,0.30)",
+    heading: "Feel the room",
+    body: "Anonymous daily polls let you gauge the energy in your class. Vote to see results.",
+  },
+];
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { user, profile, loading } = useUser();
   const [selectedGradient, setSelectedGradient] = useState(0);
+  const [selectedGender, setSelectedGender] = useState<Gender | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [step, setStep] = useState<"name" | "colour">("name");
+  const [step, setStep] = useState<Step>("name");
+  const [featureSlide, setFeatureSlide] = useState(0);
+  const [slideDir, setSlideDir] = useState(1);
 
   // Derive display name from auth — locked, cannot be changed
   const lockedName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
@@ -29,7 +61,32 @@ export default function OnboardingPage() {
     setSubmitting(true);
     sessionStorage.setItem("onboarding_name", lockedName);
     sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
+    sessionStorage.setItem("onboarding_gender", selectedGender ?? "other");
     router.push("/setup");
+  };
+
+  const goToStep = (next: Step) => {
+    setStep(next);
+  };
+
+  const stepIndex = STEPS.indexOf(step);
+
+  const advanceFeatureSlide = () => {
+    if (featureSlide < FEATURE_SLIDES.length - 1) {
+      setSlideDir(1);
+      setFeatureSlide((s) => s + 1);
+    } else {
+      handleContinue();
+    }
+  };
+
+  const retreatFeatureSlide = () => {
+    if (featureSlide > 0) {
+      setSlideDir(-1);
+      setFeatureSlide((s) => s - 1);
+    } else {
+      goToStep("colour");
+    }
   };
 
   if (loading || !user) {
@@ -81,25 +138,30 @@ export default function OnboardingPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         style={{ width: "100%", maxWidth: "420px", position: "relative", zIndex: 1 }}
       >
-        {/* Progress bar */}
+        {/* Progress dots */}
         <div style={{ display: "flex", gap: "6px", marginBottom: "36px" }}>
-          {[0, 1].map((i) => (
+          {STEPS.map((_, i) => (
             <motion.div
               key={i}
-              animate={{ background: i === 0 ? "#9b6dff" : "rgba(255,255,255,0.10)" }}
+              animate={{
+                background: i <= stepIndex ? "#9b6dff" : "rgba(255,255,255,0.10)",
+              }}
+              transition={{ duration: 0.3 }}
               style={{ flex: 1, height: "3px", borderRadius: "999px" }}
             />
           ))}
         </div>
 
         <AnimatePresence mode="wait">
-          {step === "name" ? (
+
+          {/* ── STEP 1: NAME ── */}
+          {step === "name" && (
             <motion.div
               key="name-step"
-              initial={{ opacity: 0, x: 30 }}
+              initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
             >
               <h1
                 style={{
@@ -120,7 +182,7 @@ export default function OnboardingPage() {
                   lineHeight: 1.6,
                 }}
               >
-                This is how your classmates will see you. Your name comes from your account and stays permanent — no impersonating, no trolling.
+                This is how your classmates will know you. Your name is pulled straight from your account — no aliases, no impersonation, just the real you.
               </p>
 
               {/* Big name card — read only */}
@@ -182,22 +244,190 @@ export default function OnboardingPage() {
               </motion.div>
 
               <motion.button
-                onClick={() => setStep("colour")}
+                onClick={() => goToStep("gender")}
                 className="btn-orchid"
                 whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
                 whileTap={{ scale: 0.97 }}
                 style={{ width: "100%", fontSize: "16px", padding: "16px", fontWeight: 700 }}
               >
-                That's me — pick my colour →
+                That's me →
               </motion.button>
             </motion.div>
-          ) : (
+          )}
+
+          {/* ── STEP 2: GENDER ── */}
+          {step === "gender" && (
+            <motion.div
+              key="gender-step"
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+            >
+              <h1
+                style={{
+                  fontSize: "clamp(24px,6vw,30px)",
+                  fontWeight: 900,
+                  letterSpacing: "-0.025em",
+                  marginBottom: 8,
+                  color: "#f0f0f5",
+                }}
+              >
+                Who are you?
+              </h1>
+              <p
+                style={{
+                  color: "rgba(255,255,255,0.42)",
+                  fontSize: "14px",
+                  marginBottom: "32px",
+                  lineHeight: 1.6,
+                }}
+              >
+                This helps Akin understand the room. Only your classmates can see this.
+              </p>
+
+              {/* Gender cards */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: "10px",
+                  marginBottom: "28px",
+                }}
+              >
+                {(
+                  [
+                    { value: "male" as Gender, emoji: "👨", label: "Male" },
+                    { value: "female" as Gender, emoji: "👩", label: "Female" },
+                    { value: "other" as Gender, emoji: "✨", label: "Prefer not to say" },
+                  ] as { value: Gender; emoji: string; label: string }[]
+                ).map(({ value, emoji, label }) => {
+                  const isSelected = selectedGender === value;
+                  return (
+                    <motion.button
+                      key={value}
+                      type="button"
+                      onClick={() => setSelectedGender(value)}
+                      animate={{
+                        scale: isSelected ? 1.04 : 1,
+                        background: isSelected
+                          ? "rgba(155,109,255,0.12)"
+                          : "rgba(255,255,255,0.04)",
+                        borderColor: isSelected
+                          ? "rgba(155,109,255,0.5)"
+                          : "rgba(255,255,255,0.08)",
+                      }}
+                      whileHover={{ scale: isSelected ? 1.04 : 1.03 }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        padding: "22px 8px",
+                        borderRadius: 18,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        cursor: "pointer",
+                        position: "relative",
+                        outline: "none",
+                        boxShadow: isSelected
+                          ? "0 0 24px rgba(155,109,255,0.18)"
+                          : "none",
+                      }}
+                    >
+                      {/* Selection ring */}
+                      <AnimatePresence>
+                        {isSelected && (
+                          <motion.div
+                            key="ring"
+                            initial={{ opacity: 0, scale: 0.85 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.85 }}
+                            transition={{ duration: 0.2 }}
+                            style={{
+                              position: "absolute",
+                              inset: -1,
+                              borderRadius: 18,
+                              border: "2px solid rgba(155,109,255,0.6)",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                      </AnimatePresence>
+
+                      <span style={{ fontSize: 36, lineHeight: 1 }}>{emoji}</span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: isSelected ? "rgba(200,170,255,0.9)" : "rgba(255,255,255,0.5)",
+                          textAlign: "center",
+                          lineHeight: 1.3,
+                          transition: "color 0.2s",
+                        }}
+                      >
+                        {label}
+                      </span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button
+                  onClick={() => goToStep("name")}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    flex: 0,
+                    flexBasis: 52,
+                    padding: "16px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </motion.button>
+
+                <motion.button
+                  onClick={() => goToStep("colour")}
+                  className="btn-orchid"
+                  disabled={!selectedGender}
+                  whileHover={{ scale: selectedGender ? 1.02 : 1, boxShadow: selectedGender ? "0 12px 40px rgba(155,109,255,0.55)" : "none" }}
+                  whileTap={{ scale: selectedGender ? 0.97 : 1 }}
+                  style={{
+                    flex: 1,
+                    fontSize: "16px",
+                    padding: "16px",
+                    fontWeight: 700,
+                    opacity: selectedGender ? 1 : 0.45,
+                    cursor: selectedGender ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Continue →
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP 3: COLOUR ── */}
+          {step === "colour" && (
             <motion.div
               key="colour-step"
-              initial={{ opacity: 0, x: 30 }}
+              initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
             >
               <h1
                 style={{
@@ -310,7 +540,7 @@ export default function OnboardingPage() {
 
               <div style={{ display: "flex", gap: 10 }}>
                 <motion.button
-                  onClick={() => setStep("name")}
+                  onClick={() => goToStep("gender")}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   style={{
@@ -333,18 +563,198 @@ export default function OnboardingPage() {
                 </motion.button>
 
                 <motion.button
-                  onClick={handleContinue}
+                  onClick={() => { setFeatureSlide(0); goToStep("features"); }}
                   className="btn-orchid"
-                  disabled={submitting}
-                  whileHover={{ scale: submitting ? 1 : 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
-                  whileTap={{ scale: submitting ? 1 : 0.97 }}
-                  style={{ flex: 1, fontSize: "16px", padding: "16px", fontWeight: 700, opacity: submitting ? 0.7 : 1 }}
+                  whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{ flex: 1, fontSize: "16px", padding: "16px", fontWeight: 700 }}
                 >
-                  {submitting ? "Saving…" : "Continue →"}
+                  Continue →
                 </motion.button>
               </div>
             </motion.div>
           )}
+
+          {/* ── STEP 4: FEATURES ── */}
+          {step === "features" && (
+            <motion.div
+              key="features-step"
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -40 }}
+              transition={{ duration: 0.32, ease: "easeOut" }}
+            >
+              <h1
+                style={{
+                  fontSize: "clamp(22px,5vw,28px)",
+                  fontWeight: 900,
+                  letterSpacing: "-0.025em",
+                  marginBottom: 8,
+                  color: "#f0f0f5",
+                }}
+              >
+                Here's how Akin works
+              </h1>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
+                Three things worth knowing before you step in.
+              </p>
+
+              {/* Feature card carousel */}
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, marginBottom: 22 }}>
+                <AnimatePresence mode="wait" custom={slideDir}>
+                  {(() => {
+                    const slide = FEATURE_SLIDES[featureSlide];
+                    return (
+                      <motion.div
+                        key={featureSlide}
+                        custom={slideDir}
+                        variants={{
+                          enter: (dir: number) => ({ x: dir * 60, opacity: 0 }),
+                          center: { x: 0, opacity: 1 },
+                          exit: (dir: number) => ({ x: -dir * 60, opacity: 0 }),
+                        }}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                        style={{
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: 22,
+                          padding: "32px 28px 28px",
+                          boxShadow: `0 0 60px ${slide.glowColor}, 0 8px 32px rgba(0,0,0,0.4)`,
+                          position: "relative",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Glow blob behind icon */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: -30,
+                            right: -30,
+                            width: 140,
+                            height: 140,
+                            borderRadius: "50%",
+                            background: `radial-gradient(circle, ${slide.glowColor}, transparent 70%)`,
+                            filter: "blur(24px)",
+                            pointerEvents: "none",
+                          }}
+                        />
+
+                        {/* Icon */}
+                        <div
+                          style={{
+                            fontSize: 44,
+                            lineHeight: 1,
+                            marginBottom: 20,
+                            filter: `drop-shadow(0 0 12px ${slide.glowColor})`,
+                          }}
+                        >
+                          {slide.icon}
+                        </div>
+
+                        <h2
+                          style={{
+                            fontSize: "clamp(18px,4.5vw,22px)",
+                            fontWeight: 800,
+                            color: "#f0f0f5",
+                            letterSpacing: "-0.02em",
+                            marginBottom: 12,
+                          }}
+                        >
+                          {slide.heading}
+                        </h2>
+                        <p
+                          style={{
+                            fontSize: "14px",
+                            color: "rgba(255,255,255,0.52)",
+                            lineHeight: 1.7,
+                          }}
+                        >
+                          {slide.body}
+                        </p>
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
+              </div>
+
+              {/* Dot indicators */}
+              <div style={{ display: "flex", justifyContent: "center", gap: 7, marginBottom: 24 }}>
+                {FEATURE_SLIDES.map((_, i) => (
+                  <motion.button
+                    key={i}
+                    onClick={() => {
+                      setSlideDir(i > featureSlide ? 1 : -1);
+                      setFeatureSlide(i);
+                    }}
+                    animate={{
+                      width: i === featureSlide ? 20 : 7,
+                      background: i === featureSlide ? "#9b6dff" : "rgba(255,255,255,0.18)",
+                    }}
+                    transition={{ type: "spring", stiffness: 400, damping: 26 }}
+                    style={{
+                      height: 7,
+                      borderRadius: 999,
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                      outline: "none",
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Navigation */}
+              <div style={{ display: "flex", gap: 10 }}>
+                <motion.button
+                  onClick={retreatFeatureSlide}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    flex: 0,
+                    flexBasis: 52,
+                    padding: "16px",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: 14,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "rgba(255,255,255,0.5)",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </motion.button>
+
+                <motion.button
+                  onClick={advanceFeatureSlide}
+                  disabled={submitting}
+                  className="btn-orchid"
+                  whileHover={{ scale: submitting ? 1 : 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
+                  whileTap={{ scale: submitting ? 1 : 0.97 }}
+                  style={{
+                    flex: 1,
+                    fontSize: "16px",
+                    padding: "16px",
+                    fontWeight: 700,
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  {submitting
+                    ? "Setting up…"
+                    : featureSlide < FEATURE_SLIDES.length - 1
+                    ? "Next →"
+                    : "Enter my class →"}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </motion.div>
     </div>

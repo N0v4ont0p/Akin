@@ -31,9 +31,11 @@ export default function SetupPage() {
     // Retrieve onboarding data from sessionStorage
     const storedName = sessionStorage.getItem("onboarding_name");
     const storedGradient = sessionStorage.getItem("onboarding_gradient");
+    const storedGender = sessionStorage.getItem("onboarding_gender") as "male" | "female" | "other" | null;
 
     const name = storedName ?? user.displayName?.split(" ")[0] ?? "Student";
     const gradient = storedGradient ? parseInt(storedGradient, 10) : 0;
+    const gender = storedGender ?? undefined;
 
     setSubmitting(true);
     setError("");
@@ -48,12 +50,14 @@ export default function SetupPage() {
         classData.schoolId,
         classData.schoolName,
         user.email ?? "",
-        user.photoURL ?? ""
+        user.photoURL ?? "",
+        gender
       );
 
       // Clean up session storage
       sessionStorage.removeItem("onboarding_name");
       sessionStorage.removeItem("onboarding_gradient");
+      sessionStorage.removeItem("onboarding_gender");
 
       // Hard navigate so the page reloads with fresh profile state
       window.location.href = `/class/${classData.classId}`;

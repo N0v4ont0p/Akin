@@ -83,6 +83,7 @@ export interface UserProfile {
   userId: string;
   name: string;
   avatarGradient: number;
+  gender?: "male" | "female" | "other";
   classId: string;
   className: string;
   schoolId: string;
@@ -199,11 +200,13 @@ export async function createUserProfile(
   schoolId: string,
   schoolName: string,
   email: string,
-  photoURL: string
+  photoURL: string,
+  gender?: "male" | "female" | "other"
 ): Promise<void> {
   await setDoc(doc(db, "users", userId), {
     name: name.trim(),
     avatarGradient,
+    ...(gender ? { gender } : {}),
     classId,
     className,
     schoolId,

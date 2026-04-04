@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { usePrivacyMode } from "@/providers/PrivacyModeProvider";
 import CardStack from "@/components/CardStack";
 import MatchesList from "@/components/MatchesList";
 import Navigation, { NavTab } from "@/components/Navigation";
@@ -44,7 +43,6 @@ export default function ClassPage() {
   const classId = params.classId as string;
   const router = useRouter();
   const { user, profile, loading: userLoading, akinPick, setProfile } = useUser();
-  const { privacyMode, toggle: togglePrivacy } = usePrivacyMode();
 
   const [classData, setClassData] = useState<ClassData | null>(null);
   const [classmates, setClassmates] = useState<UserProfile[]>([]);
@@ -110,19 +108,46 @@ export default function ClassPage() {
     load();
   }, [userLoading, user, classId]);
 
-  // Real-time match subscription
+  // Sync akinPick's pickedId into likedIds so already-picked person never shows in browse
+  useEffect(() => {
+    if (akinPick?.pickedId) {
+      setLikedIds(prev => {
+        const next = new Set(prev);
+        next.add(akinPick.pickedId!);
+        return next;
+      });
+    }
+  }, [akinPick?.pickedId]);
+
+  // Real-time match subscription — uses localStorage to persist seen reveals across refreshes
   useEffect(() => {
     if (!user) return;
+
+    const seenKey = `akin_seen_reveals_${user.uid}`;
+    const getSeenIds = () => {
+      try { return new Set(JSON.parse(localStorage.getItem(seenKey) || "[]")); }
+      catch { return new Set<string>(); }
+    };
+    const markSeen = (matchId: string) => {
+      const seen = getSeenIds();
+      seen.add(matchId);
+      try { localStorage.setItem(seenKey, JSON.stringify([...seen])); } catch {}
+    };
+
     const unsub = subscribeToMatches(user.uid, classId, (newMatches) => {
       setMatches(newMatches);
+      const seen = getSeenIds();
+      // On first load, mark all existing matches as seen
       if (isFirstMatchLoad.current) {
-        previousMatchIds.current = new Set(newMatches.map((m) => m.matchId));
+        newMatches.forEach(m => markSeen(m.matchId));
+        previousMatchIds.current = new Set(newMatches.map(m => m.matchId));
         isFirstMatchLoad.current = false;
         return;
       }
       for (const match of newMatches) {
-        if (!previousMatchIds.current.has(match.matchId)) {
+        if (!previousMatchIds.current.has(match.matchId) && !seen.has(match.matchId)) {
           previousMatchIds.current.add(match.matchId);
+          markSeen(match.matchId);
           const isUser1 = match.user1Id === user.uid;
           setPendingMatch({
             matchGradient: isUser1 ? match.user2Gradient : match.user1Gradient,
@@ -239,13 +264,6 @@ export default function ClassPage() {
     );
   }
 
-  const headerBg = privacyMode
-    ? "rgba(240,240,234,0.96)"
-    : "rgba(8,8,18,0.92)";
-  const headerBorder = privacyMode
-    ? "rgba(0,0,0,0.08)"
-    : "rgba(255,255,255,0.07)";
-
   return (
     <div style={{ minHeight: "100vh", paddingBottom: "112px" }}>
       {/* ── Header ──────────────────────────────────────── */}
@@ -258,11 +276,10 @@ export default function ClassPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          background: headerBg,
+          background: "rgba(8,8,18,0.92)",
           backdropFilter: "blur(28px)",
           WebkitBackdropFilter: "blur(28px)",
-          borderBottom: `1px solid ${headerBorder}`,
-          transition: "background 0.4s ease, border-color 0.4s ease",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
         }}
       >
         {/* Left: logo + class breadcrumb */}
@@ -277,7 +294,7 @@ export default function ClassPage() {
             {classData?.schoolName && (
               <p style={{
                 fontSize: "10px",
-                color: privacyMode ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.32)",
+                color: "rgba(255,255,255,0.32)",
                 fontWeight: "600",
                 marginBottom: "1px",
                 letterSpacing: "0.02em",
@@ -289,14 +306,14 @@ export default function ClassPage() {
               fontSize: "15px",
               fontWeight: "700",
               letterSpacing: "-0.01em",
-              color: privacyMode ? "#1a1a1a" : "#f0f0f5",
+              color: "#f0f0f5",
             }}>
               {classData?.name ?? "Akin"}
             </h1>
           </div>
         </div>
 
-        {/* Right: privacy toggle + match badge */}
+        {/* Right: match badge */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {matches.length > 0 && (
             <motion.button
@@ -325,184 +342,128 @@ export default function ClassPage() {
               </span>
             </motion.button>
           )}
-
-          {/* Privacy toggle */}
-          <motion.button
-            onClick={togglePrivacy}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.92 }}
-            title={privacyMode ? "Exit privacy mode" : "Enter privacy mode"}
-            style={{
-              width: "34px",
-              height: "34px",
-              borderRadius: "50%",
-              background: privacyMode ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.07)",
-              border: `1px solid ${privacyMode ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)"}`,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: privacyMode ? "#555" : "rgba(255,255,255,0.5)",
-              transition: "all 0.25s ease",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {privacyMode ? (
-                <>
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </>
-              ) : (
-                <>
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </>
-              )}
-            </svg>
-          </motion.button>
         </div>
       </div>
 
-      {/* ── Tab content ─────────────────────────────────── */}
-      <AnimatePresence mode="wait">
-        {activeTab === "browse" && (
-          <motion.div
-            key="browse"
-            initial={{ opacity: 0, x: -18 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 18 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            <div style={{ padding: "18px 18px 0" }}>
-              {!privacyMode && (
-                <AkinSlot
-                  akinPick={akinPick}
-                  onReleasePick={handleReleasePick}
-                />
-              )}
-            </div>
-            {/* Browse content — wrapped in a relative container for RefrostOverlay */}
-            <div style={{ paddingTop: "14px", position: "relative" }}>
-              <CardStack
-                classmates={classmates}
-                alreadyLiked={likedIds}
-                myName={profile?.name ?? "?"}
-                myGradient={profile?.avatarGradient ?? 0}
-                onLike={handleAkinPick}
-                onPass={handlePass}
-                onAkinPick={handleAkinPick}
-              />
-              {/* Burning Bridge — RefrostOverlay sits over the card stack */}
-              {!privacyMode && (
-                <RefrostOverlay
-                  refrostUntil={refrostUntil}
-                  onExpired={() => setRefrostUntil(null)}
-                />
-              )}
-            </div>
-          </motion.div>
-        )}
+      {/* ── Tab content — always mounted, CSS visibility swap ───────────── */}
+      <div>
+        {/* Browse tab */}
+        <motion.div
+          animate={{ opacity: activeTab === "browse" ? 1 : 0, x: activeTab === "browse" ? 0 : -20 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          style={{ display: activeTab === "browse" ? "block" : "none" }}
+        >
+          <div style={{ padding: "18px 18px 0" }}>
+            <AkinSlot
+              akinPick={akinPick}
+              onReleasePick={handleReleasePick}
+            />
+          </div>
+          {/* Browse content — wrapped in a relative container for RefrostOverlay */}
+          <div style={{ paddingTop: "14px", position: "relative" }}>
+            <CardStack
+              classmates={classmates}
+              alreadyLiked={likedIds}
+              myName={profile?.name ?? "?"}
+              myGradient={profile?.avatarGradient ?? 0}
+              onLike={handleAkinPick}
+              onPass={handlePass}
+              onAkinPick={handleAkinPick}
+            />
+            {/* Burning Bridge — RefrostOverlay sits over the card stack */}
+            <RefrostOverlay
+              refrostUntil={refrostUntil}
+              onExpired={() => setRefrostUntil(null)}
+            />
+          </div>
+        </motion.div>
 
-        {activeTab === "matches" && (
+        {/* Matches tab */}
+        <motion.div
+          animate={{ opacity: activeTab === "matches" ? 1 : 0, x: activeTab === "matches" ? 0 : 20 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          style={{ display: activeTab === "matches" ? "block" : "none" }}
+        >
+          {/* Matches shrine header */}
           <motion.div
-            key="matches"
-            initial={{ opacity: 0, x: 18 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -18 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            style={{
+              padding: "28px 24px 20px",
+              textAlign: "center",
+              position: "relative",
+            }}
           >
-            {/* Matches shrine header */}
-            {!privacyMode && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 }}
+            {/* Ambient glow */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: 280,
+                height: 100,
+                background: "radial-gradient(ellipse, rgba(155,109,255,0.15) 0%, transparent 70%)",
+                filter: "blur(20px)",
+                pointerEvents: "none",
+              }}
+            />
+            <motion.div
+              animate={{ scale: [1, 1.22, 1], filter: ["drop-shadow(0 0 6px rgba(155,109,255,0.4))", "drop-shadow(0 0 18px rgba(155,109,255,0.9))", "drop-shadow(0 0 6px rgba(155,109,255,0.4))"] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                fontSize: 28,
+                background: "linear-gradient(135deg, #9b6dff, #00e5a0)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                marginBottom: 8,
+                display: "block",
+                position: "relative",
+              }}
+            >
+              ✦
+            </motion.div>
+            <h2
+              style={{
+                fontSize: "24px",
+                fontWeight: "900",
+                letterSpacing: "-0.03em",
+                marginBottom: 4,
+                color: "#f0f0f5",
+                position: "relative",
+              }}
+            >
+              {matches.length === 0 ? "Your Matches" : matches.length === 1 ? "Your Match" : `${matches.length} Matches`}
+            </h2>
+            {matches.length > 0 && (
+              <p
                 style={{
-                  padding: "28px 24px 20px",
-                  textAlign: "center",
+                  color: "rgba(255,255,255,0.32)",
+                  fontSize: "13px",
+                  fontWeight: 500,
                   position: "relative",
                 }}
               >
-                {/* Ambient glow */}
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 280,
-                    height: 100,
-                    background: "radial-gradient(ellipse, rgba(155,109,255,0.15) 0%, transparent 70%)",
-                    filter: "blur(20px)",
-                    pointerEvents: "none",
-                  }}
-                />
-                <motion.div
-                  animate={{ scale: [1, 1.22, 1], filter: ["drop-shadow(0 0 6px rgba(155,109,255,0.4))", "drop-shadow(0 0 18px rgba(155,109,255,0.9))", "drop-shadow(0 0 6px rgba(155,109,255,0.4))"] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                  style={{
-                    fontSize: 28,
-                    background: "linear-gradient(135deg, #9b6dff, #00e5a0)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                    marginBottom: 8,
-                    display: "block",
-                    position: "relative",
-                  }}
-                >
-                  ✦
-                </motion.div>
-                <h2
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: "900",
-                    letterSpacing: "-0.03em",
-                    marginBottom: 4,
-                    color: "#f0f0f5",
-                    position: "relative",
-                  }}
-                >
-                  {matches.length === 0 ? "Your Matches" : matches.length === 1 ? "Your Match" : `${matches.length} Matches`}
-                </h2>
-                {matches.length > 0 && (
-                  <p
-                    style={{
-                      color: "rgba(255,255,255,0.32)",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      position: "relative",
-                    }}
-                  >
-                    mutual · exclusive · real
-                  </p>
-                )}
-              </motion.div>
+                mutual · exclusive · real
+              </p>
             )}
-
-            {privacyMode && (
-              <div style={{ paddingTop: "22px", padding: "22px 18px 10px" }}>
-                <h2 style={{ fontSize: "22px", fontWeight: "800", color: "#1a1a1a" }}>
-                  Notes ({matches.length})
-                </h2>
-              </div>
-            )}
-
-            {/* Vibe Check — daily anonymous class pulse */}
-            {!privacyMode && user && (
-              <VibeCheckSheet
-                vibeCheck={vibeCheck}
-                myUserId={user.uid}
-                onVote={handleVibeVote}
-                loading={vibeCheckLoading}
-              />
-            )}
-
-            <MatchesList matches={matches} myUserId={user?.uid ?? ""} />
           </motion.div>
-        )}
-      </AnimatePresence>
+
+          {/* Vibe Check — daily anonymous class pulse */}
+          {user && (
+            <VibeCheckSheet
+              vibeCheck={vibeCheck}
+              myUserId={user.uid}
+              onVote={handleVibeVote}
+              loading={vibeCheckLoading}
+            />
+          )}
+
+          <MatchesList matches={matches} myUserId={user?.uid ?? ""} />
+        </motion.div>
+      </div>
 
       {/* ── Navigation ──────────────────────────────────── */}
       <Navigation
