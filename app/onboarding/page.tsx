@@ -47,8 +47,16 @@ export default function OnboardingPage() {
   const [featureSlide, setFeatureSlide] = useState(0);
   const [slideDir, setSlideDir] = useState(1);
 
-  // Derive display name from auth — locked, cannot be changed
-  const lockedName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
+  // Name from auth — can be overridden ONCE during onboarding
+  const authName = user?.displayName?.split(" ")[0] ?? user?.email?.split("@")[0] ?? "";
+  const [editingName, setEditingName] = useState(false);
+  const [customName, setCustomName] = useState("");
+  // The name that will actually be used — custom if set, else auth
+  const displayName = editingName
+    ? customName
+    : (customName || authName);
+  // Keep lockedName alias for handleContinue
+  const lockedName = displayName;
 
   useEffect(() => {
     if (loading) return;
@@ -58,9 +66,10 @@ export default function OnboardingPage() {
   }, [loading, user, profile, router]);
 
   const handleContinue = async () => {
-    if (!user || !lockedName) return;
+    const finalName = (customName.trim() || authName).trim();
+    if (!user || !finalName) return;
     setSubmitting(true);
-    sessionStorage.setItem("onboarding_name", lockedName);
+    sessionStorage.setItem("onboarding_name", finalName);
     sessionStorage.setItem("onboarding_gradient", String(selectedGradient));
     sessionStorage.setItem("onboarding_gender", selectedGender ?? "other");
     sessionStorage.setItem("onboarding_facts", JSON.stringify(facts));
@@ -165,92 +174,138 @@ export default function OnboardingPage() {
               exit={{ opacity: 0, x: -40 }}
               transition={{ duration: 0.32, ease: "easeOut" }}
             >
-              <h1
-                style={{
-                  fontSize: "clamp(24px,6vw,30px)",
-                  fontWeight: 900,
-                  letterSpacing: "-0.025em",
-                  marginBottom: 8,
-                  color: "#f0f0f5",
-                }}
-              >
-                Hey, {lockedName || "there"} 👋
+              <h1 style={{ fontSize: "clamp(24px,6vw,30px)", fontWeight: 900, letterSpacing: "-0.025em", marginBottom: 8, color: "#f0f0f5" }}>
+                Hey, {displayName || "there"} 👋
               </h1>
-              <p
-                style={{
-                  color: "rgba(255,255,255,0.42)",
-                  fontSize: "14px",
-                  marginBottom: "36px",
-                  lineHeight: 1.6,
-                }}
-              >
-                This is how your classmates will know you. Your name is pulled straight from your account — no aliases, no impersonation, just the real you.
+              <p style={{ color: "rgba(255,255,255,0.42)", fontSize: "14px", marginBottom: "28px", lineHeight: 1.6 }}>
+                This is how your classmates will know you. Once you continue, your name is permanent.
               </p>
 
-              {/* Big name card — read only */}
+              {/* Name card */}
               <motion.div
-                whileHover={{ scale: 1.01 }}
+                layout
                 style={{
                   background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(155,109,255,0.30)",
+                  border: `1px solid ${editingName ? "rgba(155,109,255,0.5)" : "rgba(155,109,255,0.28)"}`,
                   borderRadius: 20,
-                  padding: "22px 24px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 18,
-                  marginBottom: 28,
-                  boxShadow: "0 0 32px rgba(155,109,255,0.08)",
+                  padding: "20px 22px",
+                  marginBottom: 16,
+                  boxShadow: editingName ? "0 0 32px rgba(155,109,255,0.14)" : "0 0 20px rgba(155,109,255,0.06)",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
                 }}
               >
-                <GradientAvatar
-                  gradient={selectedGradient}
-                  name={lockedName || "?"}
-                  size={68}
-                  border="2px solid rgba(255,255,255,0.1)"
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 800,
-                      color: "#f0f0f5",
-                      letterSpacing: "-0.02em",
-                      marginBottom: 4,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {lockedName || "—"}
-                  </p>
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 5,
-                      background: "rgba(155,109,255,0.10)",
-                      border: "1px solid rgba(155,109,255,0.22)",
-                      borderRadius: 999,
-                      padding: "3px 10px",
-                    }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(155,109,255,0.8)" strokeWidth="2.5" strokeLinecap="round">
-                      <rect x="3" y="11" width="18" height="11" rx="2" />
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    </svg>
-                    <span style={{ fontSize: 11, color: "rgba(155,109,255,0.75)", fontWeight: 600 }}>
-                      locked · authentic
-                    </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: editingName ? 16 : 0 }}>
+                  <GradientAvatar
+                    gradient={selectedGradient}
+                    name={displayName || "?"}
+                    size={62}
+                    border="2px solid rgba(255,255,255,0.1)"
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: "#f0f0f5", letterSpacing: "-0.02em", marginBottom: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {displayName || "—"}
+                    </p>
+                    {!editingName ? (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(155,109,255,0.10)", border: "1px solid rgba(155,109,255,0.22)", borderRadius: 999, padding: "3px 10px" }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(155,109,255,0.8)" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                        <span style={{ fontSize: 11, color: "rgba(155,109,255,0.75)", fontWeight: 600 }}>from your account</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(254,225,64,0.08)", border: "1px solid rgba(254,225,64,0.28)", borderRadius: 999, padding: "3px 10px" }}>
+                        <span style={{ fontSize: 10 }}>⚠️</span>
+                        <span style={{ fontSize: 11, color: "rgba(254,225,64,0.85)", fontWeight: 600 }}>one-time change</span>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* Inline name input — only visible when editing */}
+                <AnimatePresence>
+                  {editingName && (
+                    <motion.div
+                      key="name-input"
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: "auto", marginTop: 0 }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22 }}
+                      style={{ overflow: "hidden" }}
+                    >
+                      <input
+                        autoFocus
+                        value={customName}
+                        onChange={e => setCustomName(e.target.value.slice(0, 30))}
+                        placeholder={authName}
+                        maxLength={30}
+                        style={{
+                          width: "100%",
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          background: "rgba(255,255,255,0.07)",
+                          border: "1px solid rgba(155,109,255,0.35)",
+                          color: "#f0f0f5",
+                          fontSize: 16,
+                          fontFamily: "inherit",
+                          fontWeight: 700,
+                          outline: "none",
+                          boxSizing: "border-box",
+                          letterSpacing: "-0.01em",
+                        }}
+                      />
+                      <p style={{ fontSize: 11, color: "rgba(254,225,64,0.6)", marginTop: 7, lineHeight: 1.5 }}>
+                        ⚠️ This is permanent. You cannot change your name after setup. Make it count.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
+
+              {/* "Use a different name" toggle */}
+              {!editingName && (
+                <motion.button
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  onClick={() => {
+                    setCustomName(authName);
+                    setEditingName(true);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "rgba(255,255,255,0.32)",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 0",
+                    marginBottom: 20,
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  Use a different name
+                </motion.button>
+              )}
+
+              {editingName && (
+                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                  <motion.button
+                    onClick={() => { setEditingName(false); setCustomName(""); }}
+                    whileTap={{ scale: 0.97 }}
+                    style={{ padding: "8px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.4)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    Use "{authName}" instead
+                  </motion.button>
+                </div>
+              )}
 
               <motion.button
                 onClick={() => goToStep("gender")}
+                disabled={editingName && !customName.trim()}
                 className="btn-orchid"
                 whileHover={{ scale: 1.02, boxShadow: "0 12px 40px rgba(155,109,255,0.55)" }}
                 whileTap={{ scale: 0.97 }}
-                style={{ width: "100%", fontSize: "16px", padding: "16px", fontWeight: 700 }}
+                style={{ width: "100%", fontSize: "16px", padding: "16px", fontWeight: 700, opacity: editingName && !customName.trim() ? 0.45 : 1 }}
               >
                 That's me →
               </motion.button>

@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 import { GRADIENTS, UserProfile } from "@/lib/firestore";
+import { auth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 interface ProfileSheetProps {
   profile: UserProfile;
@@ -26,6 +28,17 @@ export default function ProfileSheet({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await signOut(auth);
+      window.location.href = "/auth";
+    } catch {
+      setLoggingOut(false);
+    }
+  };
 
   const gradientChanged = gradient !== (profile.avatarGradient ?? 0);
 
@@ -460,6 +473,48 @@ export default function ProfileSheet({
               </motion.button>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* ─── Log out ─────────────────────────────────────── */}
+        <div style={{ padding: "0 20px", marginBottom: 12 }}>
+          <motion.button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            whileHover={{ scale: loggingOut ? 1 : 1.01 }}
+            whileTap={{ scale: loggingOut ? 1 : 0.98 }}
+            style={{
+              width: "100%",
+              padding: "14px",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 14,
+              color: loggingOut ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.55)",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: loggingOut ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 9,
+              transition: "background 0.2s, color 0.2s",
+            }}
+          >
+            {loggingOut ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "rgba(255,255,255,0.5)" }}
+              />
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            )}
+            {loggingOut ? "Signing out…" : "Sign out"}
+          </motion.button>
         </div>
 
         {/* ─── Danger zone ─────────────────────────────────── */}
