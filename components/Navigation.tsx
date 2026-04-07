@@ -4,24 +4,34 @@ import React from "react";
 import { motion } from "framer-motion";
 import GradientAvatar from "./GradientAvatar";
 
-export type NavTab = "browse" | "matches";
+export type NavTab = "browse" | "timeline" | "matches";
 
 interface NavigationProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   matchCount: number;
+  akinPickCount: number;
   onProfileTap: () => void;
   myGradient?: number;
   myName?: string;
+  myAccentColor?: "orchid" | "mint" | "gold";
 }
+
+const accentRingMap: Record<string, string> = {
+  orchid: "linear-gradient(135deg, rgba(155,109,255,0.8), rgba(0,229,160,0.5))",
+  mint: "linear-gradient(135deg, rgba(0,229,160,0.8), rgba(137,247,254,0.5))",
+  gold: "linear-gradient(135deg, rgba(254,225,64,0.8), rgba(255,180,60,0.5))",
+};
 
 export default function Navigation({
   activeTab,
   onTabChange,
   matchCount,
+  akinPickCount,
   onProfileTap,
   myGradient = 0,
   myName = "?",
+  myAccentColor = "orchid",
 }: NavigationProps) {
   return (
     <div
@@ -31,7 +41,7 @@ export default function Navigation({
         left: 0,
         right: 0,
         zIndex: 100,
-        padding: "0 16px 28px",
+        padding: "0 16px max(28px, env(safe-area-inset-bottom))",
         display: "flex",
         justifyContent: "center",
       }}
@@ -41,15 +51,14 @@ export default function Navigation({
           borderRadius: "24px",
           padding: "6px",
           display: "flex",
-          gap: "4px",
+          gap: "3px",
           width: "100%",
-          maxWidth: "360px",
-          /* Solid enough to always read text */
-          background: "rgba(10,10,20,0.94)",
+          maxWidth: "400px",
+          background: "rgba(10,10,20,0.96)",
           backdropFilter: "blur(28px)",
           WebkitBackdropFilter: "blur(28px)",
           border: "1px solid rgba(255,255,255,0.10)",
-          boxShadow: "0 -4px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset",
+          boxShadow: "0 -4px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04) inset",
         }}
       >
         {/* Browse */}
@@ -59,9 +68,23 @@ export default function Navigation({
           onClick={() => onTabChange("browse")}
           badge={null}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </NavButton>
+
+        {/* Timeline */}
+        <NavButton
+          label="Timeline"
+          isActive={activeTab === "timeline"}
+          onClick={() => onTabChange("timeline")}
+          badge={akinPickCount > 0 ? akinPickCount : null}
+          badgeColor="rgba(137,247,254,0.9)"
+        >
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
         </NavButton>
 
@@ -73,8 +96,8 @@ export default function Navigation({
           badge={matchCount > 0 ? matchCount : null}
         >
           <svg
-            width="20"
-            height="20"
+            width="19"
+            height="19"
             viewBox="0 0 24 24"
             fill={activeTab === "matches" ? "currentColor" : "none"}
             stroke="currentColor"
@@ -86,7 +109,7 @@ export default function Navigation({
           </svg>
         </NavButton>
 
-        {/* Profile — shows actual avatar */}
+        {/* Profile — avatar button */}
         <motion.button
           onClick={onProfileTap}
           whileTap={{ scale: 0.9 }}
@@ -95,8 +118,9 @@ export default function Navigation({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
+            justifyContent: "center",
             gap: "4px",
-            padding: "10px 8px",
+            padding: "10px 6px",
             borderRadius: "18px",
             border: "none",
             background: "transparent",
@@ -109,26 +133,26 @@ export default function Navigation({
             style={{
               borderRadius: "50%",
               padding: "2px",
-              background: "linear-gradient(135deg, rgba(155,109,255,0.6), rgba(0,229,160,0.4))",
+              background: accentRingMap[myAccentColor] ?? accentRingMap.orchid,
             }}
           >
             <GradientAvatar
               gradient={myGradient}
               name={myName}
-              size={26}
+              size={24}
               border="1.5px solid rgba(10,10,20,0.8)"
             />
           </motion.div>
           <span
             style={{
-              fontSize: "10px",
-              fontWeight: "500",
-              letterSpacing: "0.04em",
+              fontSize: "9px",
+              fontWeight: "600",
+              letterSpacing: "0.05em",
               textTransform: "uppercase",
-              color: "rgba(255,255,255,0.38)",
+              color: "rgba(255,255,255,0.35)",
             }}
           >
-            Profile
+            You
           </span>
         </motion.button>
       </div>
@@ -142,9 +166,10 @@ interface NavButtonProps {
   isActive: boolean;
   onClick: () => void;
   badge: number | null;
+  badgeColor?: string;
 }
 
-function NavButton({ label, children, isActive, onClick, badge }: NavButtonProps) {
+function NavButton({ label, children, isActive, onClick, badge, badgeColor = "var(--mint)" }: NavButtonProps) {
   return (
     <motion.button
       onClick={onClick}
@@ -154,12 +179,13 @@ function NavButton({ label, children, isActive, onClick, badge }: NavButtonProps
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        justifyContent: "center",
         gap: "4px",
-        padding: "10px 8px",
+        padding: "10px 6px",
         borderRadius: "18px",
         border: "none",
         background: "transparent",
-        color: isActive ? "var(--orchid)" : "rgba(255,255,255,0.42)",
+        color: isActive ? "var(--orchid)" : "rgba(255,255,255,0.38)",
         cursor: "pointer",
         position: "relative",
         transition: "color 0.2s ease",
@@ -173,8 +199,8 @@ function NavButton({ label, children, isActive, onClick, badge }: NavButtonProps
             position: "absolute",
             inset: 0,
             borderRadius: "18px",
-            background: "rgba(155,109,255,0.14)",
-            border: "1px solid rgba(155,109,255,0.25)",
+            background: "rgba(155,109,255,0.13)",
+            border: "1px solid rgba(155,109,255,0.22)",
           }}
           transition={{ type: "spring", stiffness: 440, damping: 40 }}
         />
@@ -187,21 +213,21 @@ function NavButton({ label, children, isActive, onClick, badge }: NavButtonProps
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 18 }}
-            className="pulse-dot"
             style={{
               position: "absolute",
               top: "-5px",
-              right: "-6px",
-              width: "17px",
-              height: "17px",
-              borderRadius: "50%",
-              background: "var(--mint)",
+              right: "-7px",
+              minWidth: "16px",
+              height: "16px",
+              borderRadius: "999px",
+              background: badgeColor,
               color: "#07070f",
-              fontSize: "10px",
-              fontWeight: "700",
+              fontSize: "9px",
+              fontWeight: "800",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              padding: "0 3px",
             }}
           >
             {badge > 9 ? "9+" : badge}
@@ -211,9 +237,9 @@ function NavButton({ label, children, isActive, onClick, badge }: NavButtonProps
 
       <span
         style={{
-          fontSize: "10px",
-          fontWeight: isActive ? "700" : "500",
-          letterSpacing: "0.04em",
+          fontSize: "9px",
+          fontWeight: isActive ? "800" : "500",
+          letterSpacing: "0.05em",
           textTransform: "uppercase",
           position: "relative",
           zIndex: 1,

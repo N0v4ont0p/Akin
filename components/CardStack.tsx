@@ -17,10 +17,19 @@ interface CardStackProps {
   alreadyLiked: Set<string>;
   myName: string;
   myGradient: number;
+  myAccentColor?: "orchid" | "mint" | "gold";
+  currentPickCount: number;
   onLike: (classmate: UserProfile) => Promise<void>;
   onPass: (classmate: UserProfile) => void;
   onAkinPick?: (classmate: UserProfile) => Promise<void>;
 }
+
+// ─── Accent color maps ────────────────────────────────────────────────────────
+const accentColorMap: Record<string, string> = {
+  orchid: "#9b6dff",
+  mint: "#00e5a0",
+  gold: "#fee140",
+};
 
 // ─── Draggable Card ───────────────────────────────────────────────────────────
 interface DraggableCardProps {
@@ -37,17 +46,76 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
   const passOpacity = useTransform(x, [-80, -14], [1, 0]);
   const cardOpacity = useTransform(x, [-220, -180, 0, 180, 220], [0, 1, 1, 1, 0]);
 
-  // ── Magnetic Pull transforms ──────────────────────────────────────
-  // Card subtly stretches toward the Akin side and compresses away from pass
+  // ── Dynamic card tinting overlays ────────────────────────────────────
+  const akinOverlayOpacity = useTransform(x, [0, 100], [0, 0.85]);
+  const skipOverlayOpacity = useTransform(x, [-100, 0], [0.85, 0]);
+
+  // ── Dynamic box shadow driven by drag direction ───────────────────────
+  const cardElevation = useTransform(
+    x,
+    [-160, 0, 160],
+    [
+      "0 8px 24px rgba(255,60,80,0.25), 0 2px 8px rgba(0,0,0,0.5)",
+      "0 20px 56px rgba(0,0,0,0.4)",
+      "0 24px 72px rgba(155,109,255,0.4), 0 8px 24px rgba(0,0,0,0.5)",
+    ]
+  );
+
+  // ── Magnetic Pull transforms ──────────────────────────────────────────
   const magneticScaleX = useTransform(x, [-200, -60, 0, 60, 200], [0.96, 0.98, 1, 1.03, 1.06]);
   const magneticSkewX = useTransform(x, [-120, 0, 120], [-2.5, 0, 2.5]);
-  // The card "leans" toward whichever direction
   const magneticY = useTransform(x, [-200, 0, 200], [4, 0, -4]);
 
   const handleDragEnd = (_: unknown, info: { offset: { x: number } }) => {
     if (info.offset.x > 90) onLike();
     else if (info.offset.x < -90) onPass();
   };
+
+  // Accent color for this classmate
+  const accentColor = accentColorMap[classmate.accentColor ?? "orchid"] ?? accentColorMap.orchid;
+
+  // Peek card tint based on peekNext accent
+  const peekAccentMap: Record<string, string> = {
+    orchid: "rgba(155,109,255,0.12)",
+    mint: "rgba(0,229,160,0.10)",
+    gold: "rgba(254,225,64,0.10)",
+  };
+  const peekTint = peekAccentMap[peekNext?.accentColor ?? "orchid"] ?? peekAccentMap.orchid;
+
+  // Vibe emoji map
+  const vibeEmoji: Record<string, string> = {
+    "Campus Hermit": "🦔",
+    "Social Butterfly": "🦋",
+    "Late Night Grinder": "🌙",
+    "Early Bird": "🐦",
+  };
+  const facts = (classmate as unknown as { facts?: Record<string, string> })?.facts;
+  const vibe = facts?.campusVibe ? vibeEmoji[facts.campusVibe] : undefined;
+  const genderLabel =
+    classmate.gender === "male" ? "♂" : classmate.gender === "female" ? "♀" : null;
+  const major = facts?.major;
+
+  // Subtitle: gender symbol + major if available, else "your classmate"
+  const subtitle =
+    genderLabel || major
+      ? [genderLabel, major].filter(Boolean).join(" · ")
+      : "your classmate";
+
+  // Ring gradient
+  const ringMap: Record<string, string> = {
+    orchid: "linear-gradient(135deg, rgba(155,109,255,0.6), rgba(0,229,160,0.3))",
+    mint: "linear-gradient(135deg, rgba(0,229,160,0.6), rgba(137,247,254,0.4))",
+    gold: "linear-gradient(135deg, rgba(254,225,64,0.6), rgba(255,180,60,0.4))",
+  };
+  const ring = ringMap[classmate.accentColor ?? "orchid"] ?? ringMap.orchid;
+
+  // Aura color
+  const auraMap: Record<string, string> = {
+    orchid: "rgba(155,109,255,0.14)",
+    mint: "rgba(0,229,160,0.12)",
+    gold: "rgba(254,225,64,0.10)",
+  };
+  const auraColor = auraMap[classmate.accentColor ?? "orchid"] ?? auraMap.orchid;
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: "340px" }}>
@@ -61,7 +129,7 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
             right: "10px",
             height: "80%",
             borderRadius: "28px",
-            background: "rgba(255,255,255,0.03)",
+            background: peekTint,
             backdropFilter: "blur(8px)",
             border: "1px solid rgba(255,255,255,0.06)",
             transform: "scale(0.92)",
@@ -83,7 +151,7 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
       >
       {/* Inner wrapper applies Magnetic Pull warp */}
       <motion.div style={{ scaleX: magneticScaleX, skewX: magneticSkewX, y: magneticY }}>
-        {/* Like indicator */}
+        {/* AKIN stamp */}
         <motion.div
           style={{
             opacity: likeOpacity,
@@ -96,19 +164,21 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
         >
           <div
             style={{
-              border: "3px solid #9b6dff",
+              border: `3.5px solid ${accentColor}`,
               borderRadius: 10,
               padding: "5px 12px",
               background: "rgba(155,109,255,0.18)",
               backdropFilter: "blur(8px)",
+              boxShadow: "0 0 28px rgba(155,109,255,0.7)",
             }}
           >
             <span
               style={{
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: 800,
-                color: "#9b6dff",
+                color: accentColor,
                 letterSpacing: "0.08em",
+                textShadow: "0 0 20px rgba(155,109,255,0.9)",
               }}
             >
               AKIN
@@ -116,7 +186,7 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
           </div>
         </motion.div>
 
-        {/* Pass indicator */}
+        {/* NOPE stamp */}
         <motion.div
           style={{
             opacity: passOpacity,
@@ -129,84 +199,153 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
         >
           <div
             style={{
-              border: "3px solid rgba(255,79,123,0.8)",
+              border: "3.5px solid rgba(255,60,80,0.85)",
               borderRadius: 10,
               padding: "5px 12px",
-              background: "rgba(255,79,123,0.15)",
+              background: "rgba(255,50,80,0.15)",
               backdropFilter: "blur(8px)",
+              boxShadow: "0 0 28px rgba(255,60,80,0.6)",
             }}
           >
             <span
               style={{
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: 800,
-                color: "rgba(255,79,123,0.9)",
+                color: "rgba(255,60,80,0.95)",
                 letterSpacing: "0.06em",
+                textShadow: "0 0 20px rgba(255,60,80,0.8)",
               }}
             >
-              SKIP
+              NOPE
             </span>
           </div>
         </motion.div>
 
-        {/* Card body */}
-        <div
+        {/* Card body — motion.div so it can receive MotionValue boxShadow */}
+        <motion.div
           className="glass shimmer-border"
           style={{
             borderRadius: "28px",
             padding: "52px 32px 40px",
             textAlign: "center",
-            boxShadow: "0 20px 56px rgba(0,0,0,0.4)",
+            boxShadow: cardElevation,
             cursor: "grab",
             userSelect: "none",
             position: "relative",
             overflow: "hidden",
           }}
         >
-          {/* Subtle gradient blob inside card */}
+          {/* Accent color aura */}
           <div
             style={{
               position: "absolute",
               top: -40,
               left: "50%",
               transform: "translateX(-50%)",
-              width: 180,
-              height: 180,
+              width: 200,
+              height: 200,
               borderRadius: "50%",
-              background: `radial-gradient(circle, rgba(155,109,255,0.1), transparent 70%)`,
+              background: `radial-gradient(circle, ${auraColor}, transparent 70%)`,
               filter: "blur(30px)",
               pointerEvents: "none",
             }}
           />
 
+          {/* Akin overlay tint (right swipe = purple/mint) */}
+          <motion.div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "28px",
+              background: "linear-gradient(135deg, rgba(155,109,255,0.18), rgba(0,229,160,0.08))",
+              opacity: akinOverlayOpacity,
+              pointerEvents: "none",
+              zIndex: 1,
+            }}
+          />
+
+          {/* Skip overlay tint (left swipe = pink/red) */}
+          <motion.div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "28px",
+              background: "rgba(255,50,80,0.14)",
+              opacity: skipOverlayOpacity,
+              pointerEvents: "none",
+              zIndex: 1,
+            }}
+          />
+
           {/* Avatar */}
           <motion.div
-            style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}
+            style={{ display: "flex", justifyContent: "center", marginBottom: 20, position: "relative", zIndex: 2 }}
           >
-            <div
-              style={{
-                padding: 4,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, rgba(155,109,255,0.5), rgba(0,229,160,0.3))",
-              }}
-            >
+            <div style={{ padding: 5, borderRadius: "50%", background: ring }}>
               <GradientAvatar
                 gradient={classmate.avatarGradient ?? 0}
                 name={classmate.name}
-                size={108}
+                size={116}
                 border="3px solid rgba(7,7,15,0.8)"
               />
             </div>
           </motion.div>
 
+          {/* Personality badges */}
+          {(vibe || genderLabel) && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: 6,
+                marginBottom: 10,
+                position: "relative",
+                zIndex: 2,
+              }}
+            >
+              {genderLabel && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "rgba(255,255,255,0.55)",
+                    background: "rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {genderLabel}
+                </span>
+              )}
+              {vibe && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "rgba(255,255,255,0.55)",
+                    background: "rgba(255,255,255,0.07)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {vibe}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Name */}
           <h2
             style={{
-              fontSize: "28px",
-              fontWeight: 800,
-              marginBottom: 6,
+              fontSize: "30px",
+              fontWeight: 900,
+              marginBottom: 5,
               letterSpacing: "-0.025em",
               color: "#f0f0f5",
+              position: "relative",
+              zIndex: 2,
             }}
           >
             {classmate.name}
@@ -219,55 +358,51 @@ function DraggableCard({ classmate, onLike, onPass, peekNext }: DraggableCardPro
               textTransform: "uppercase",
               letterSpacing: "0.14em",
               marginBottom: 28,
+              position: "relative",
+              zIndex: 2,
             }}
           >
-            your classmate
+            {subtitle}
           </p>
 
-          {/* Swipe hint */}
+          {/* Dot direction hint — replaces oscillating arrows */}
           <div
             style={{
               display: "flex",
-              gap: 10,
-              justifyContent: "center",
               alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              position: "relative",
+              zIndex: 2,
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(255,79,123,0.08)",
-                border: "1px solid rgba(255,79,123,0.2)",
-                borderRadius: 999,
-                padding: "5px 12px",
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,79,123,0.7)" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="20" y1="12" x2="4" y2="12"/><polyline points="10 18 4 12 10 6"/>
-              </svg>
-              <span style={{ fontSize: 11, color: "rgba(255,79,123,0.65)", fontWeight: 500 }}>skip</span>
-            </div>
-            <div style={{ width: 4, height: 4, borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                background: "rgba(155,109,255,0.08)",
-                border: "1px solid rgba(155,109,255,0.2)",
-                borderRadius: 999,
-                padding: "5px 12px",
-              }}
-            >
-              <span style={{ fontSize: 11, color: "rgba(155,109,255,0.8)", fontWeight: 500 }}>akin</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(155,109,255,0.8)" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="4" y1="12" x2="20" y2="12"/><polyline points="14 6 20 12 14 18"/>
-              </svg>
-            </div>
+            {/* Left dots — pink */}
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={`l-${i}`}
+                style={{
+                  width: i === 2 ? 5 : i === 1 ? 4 : 3,
+                  height: i === 2 ? 5 : i === 1 ? 4 : 3,
+                  borderRadius: "50%",
+                  background: `rgba(255,60,80,${0.15 + i * 0.08})`,
+                }}
+              />
+            ))}
+            <div style={{ width: 8 }} />
+            {/* Right dots — orchid */}
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={`r-${i}`}
+                style={{
+                  width: i === 0 ? 3 : i === 1 ? 4 : 5,
+                  height: i === 0 ? 3 : i === 1 ? 4 : 5,
+                  borderRadius: "50%",
+                  background: `rgba(155,109,255,${0.15 + i * 0.08})`,
+                }}
+              />
+            ))}
           </div>
-        </div>
+        </motion.div>
       </motion.div>
       {/* close magnetic inner wrapper */}
       </motion.div>
@@ -281,6 +416,8 @@ export default function CardStack({
   alreadyLiked,
   myName,
   myGradient,
+  myAccentColor = "orchid",
+  currentPickCount,
   onLike,
   onPass,
   onAkinPick,
@@ -297,6 +434,12 @@ export default function CardStack({
   useEffect(() => {
     const filtered = classmates.filter((c) => !alreadyLiked.has(c.userId));
     setQueue(filtered);
+    // If current card is now in the liked/picked set, silently skip to next
+    setCurrent(prev => {
+      if (!prev) return null;
+      if (alreadyLiked.has(prev.userId)) return filtered[0] ?? null;
+      return prev;
+    });
   }, [classmates, alreadyLiked]);
 
   useEffect(() => {
@@ -329,13 +472,15 @@ export default function CardStack({
     setIsShivering(true);
     setTimeout(() => setIsShivering(false), 380);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(40);
-    await (onAkinPick ?? onLike)(target);
+    // Fire-and-forget: never await Firestore — advance always fires immediately
+    void (onAkinPick ?? onLike)(target);
     setTimeout(advance, 680);
   };
 
   const handlePass = () => {
     if (!current || animating) return;
     setAnimating("pass");
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(12);
     onPass(current);
     setTimeout(advance, 420);
   };
@@ -350,49 +495,93 @@ export default function CardStack({
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 260, damping: 24 }}
-        style={{ textAlign: "center", padding: "60px 24px" }}
+        style={{ textAlign: "center", padding: "48px 28px" }}
       >
-        <motion.div
-          animate={{ scale: [1, 1.08, 1], boxShadow: ["0 0 32px rgba(155,109,255,0.3)", "0 0 64px rgba(155,109,255,0.6)", "0 0 32px rgba(155,109,255,0.3)"] }}
-          transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
-          style={{
-            width: 88,
-            height: 88,
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #9b6dff, #00e5a0)",
-            margin: "0 auto 28px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-          </svg>
-        </motion.div>
+        {/* Orbit rings */}
+        <div style={{ position: "relative", width: 110, height: 110, margin: "0 auto 32px" }}>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 14, repeat: Infinity, ease: "linear" }}
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              border: "1.5px dashed rgba(155,109,255,0.25)",
+            }}
+          />
+          <motion.div
+            animate={{ rotate: -360 }}
+            transition={{ duration: 9, repeat: Infinity, ease: "linear" }}
+            style={{
+              position: "absolute",
+              inset: 16,
+              borderRadius: "50%",
+              border: "1.5px dashed rgba(0,229,160,0.2)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 28,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, rgba(155,109,255,0.3), rgba(0,229,160,0.2))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <motion.span
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 2.2, repeat: Infinity }}
+              style={{ fontSize: 24 }}
+            >
+              ✦
+            </motion.span>
+          </div>
+        </div>
+
         <h3
           style={{
-            fontSize: "24px",
-            fontWeight: 800,
-            marginBottom: 12,
+            fontSize: "22px",
+            fontWeight: 900,
+            marginBottom: 10,
             color: "#f0f0f5",
             letterSpacing: "-0.02em",
           }}
         >
-          All caught up
+          You&apos;ve seen everyone
         </h3>
         <p
           style={{
-            color: "rgba(255,255,255,0.38)",
-            fontSize: "15px",
-            lineHeight: 1.7,
+            color: "rgba(255,255,255,0.42)",
+            fontSize: "14px",
+            lineHeight: 1.75,
             maxWidth: 260,
-            margin: "0 auto",
+            margin: "0 auto 20px",
           }}
         >
-          You've seen everyone in your class.
-          Check Matches to see who connected with you.
+          But not everyone has seen you yet. New classmates join all the time — and someone may have already picked you.
         </p>
+
+        {/* FOMO nudge */}
+        <motion.div
+          animate={{ opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 2.8, repeat: Infinity }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: "rgba(155,109,255,0.08)",
+            border: "1px solid rgba(155,109,255,0.2)",
+            borderRadius: 999,
+            padding: "8px 16px",
+          }}
+        >
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#9b6dff" }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(155,109,255,0.85)" }}>
+            Check Matches — your Akin might be waiting
+          </span>
+        </motion.div>
       </motion.div>
     );
   }
@@ -476,83 +665,34 @@ export default function CardStack({
         </AnimatePresence>
       </div>
 
-      {/* Buttons */}
-      <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-        {/* Pass */}
-        <motion.button
-          onClick={handlePass}
-          disabled={!!animating}
-          whileHover={{ scale: 1.08, backgroundColor: "rgba(255,79,123,0.12)" }}
-          whileTap={{ scale: 0.9 }}
-          style={{
-            width: "60px",
-            height: "60px",
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,79,123,0.22)",
-            backdropFilter: "blur(12px)",
-            color: "rgba(255,79,123,0.6)",
-            cursor: animating ? "not-allowed" : "pointer",
-            opacity: animating ? 0.35 : 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "opacity 0.2s",
-          }}
-          title="Skip"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </motion.button>
-
-        {/* Akin pick (primary) */}
-        <motion.button
-          onClick={handleLike}
-          disabled={!!animating}
-          whileHover={{ scale: 1.1, boxShadow: "0 12px 48px rgba(155,109,255,0.6)" }}
-          whileTap={{ scale: 0.9 }}
-          style={{
-            width: "72px",
-            height: "72px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #9b6dff, #6d3bff)",
-            border: "none",
-            cursor: animating ? "not-allowed" : "pointer",
-            opacity: animating ? 0.35 : 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 8px 36px rgba(155,109,255,0.45)",
-            transition: "opacity 0.2s, box-shadow 0.25s ease",
-          }}
-          title="Pick as Akin"
-        >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="white" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-          </svg>
-        </motion.button>
-
-        {/* Swipe hint pill */}
-        <div
-          style={{
-            padding: "8px 14px",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            color: "rgba(255,255,255,0.22)",
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
-          </svg>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em" }}>swipe right to Akin</span>
-        </div>
-      </div>
+      {/* Gesture hint — glass pill */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          background: "rgba(255,255,255,0.04)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 999,
+          padding: "6px 14px",
+        }}
+      >
+        <span style={{ fontSize: 11, color: "rgba(255,79,123,0.45)", fontWeight: 600, letterSpacing: "0.04em" }}>← skip forever</span>
+        <div style={{ width: 3, height: 3, borderRadius: "50%", background: "rgba(255,255,255,0.12)" }} />
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.18)", fontWeight: 500 }}>drag</span>
+        <div style={{ width: 3, height: 3, borderRadius: "50%", background: "rgba(255,255,255,0.12)" }} />
+        <span style={{ fontSize: 11, color: accentColorMap[myAccentColor] ? `${accentColorMap[myAccentColor]}aa` : "rgba(155,109,255,0.65)", fontWeight: 600, letterSpacing: "0.04em" }}>
+          akin ✦ →
+          {currentPickCount === 0 && (
+            <span style={{ color: "rgba(255,215,80,0.7)", marginLeft: 4, fontSize: 10 }}>⚡ instant</span>
+          )}
+        </span>
+      </motion.div>
 
       {queue.length > 1 && (
         <p style={{ color: "rgba(255,255,255,0.18)", fontSize: "12px" }}>
@@ -565,6 +705,7 @@ export default function CardStack({
         target={confirmTarget}
         myName={myName}
         myGradient={myGradient}
+        currentPickCount={currentPickCount}
         onConfirm={handleConfirmAkin}
         onCancel={() => setConfirmTarget(null)}
       />

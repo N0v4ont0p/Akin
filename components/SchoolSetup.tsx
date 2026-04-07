@@ -42,20 +42,24 @@ export default function SchoolSetup({ userId, onComplete }: SchoolSetupProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
     getAllSchools()
-      .then(setSchools)
-      .catch(() => setError("Failed to load schools."))
-      .finally(() => setLoading(false));
+      .then((data) => { if (active) setSchools(data); })
+      .catch(() => { if (active) setError("Failed to load schools."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (selectedSchool) {
-      setLoading(true);
-      getClassesForSchool(selectedSchool.schoolId)
-        .then(setClasses)
-        .catch(() => setError("Failed to load classes."))
-        .finally(() => setLoading(false));
-    }
+    if (!selectedSchool) return;
+    let active = true;
+    setLoading(true);
+    getClassesForSchool(selectedSchool.schoolId)
+      .then((data) => { if (active) setClasses(data); })
+      .catch(() => { if (active) setError("Failed to load classes."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [selectedSchool]);
 
   const filteredSchools = schools.filter((s) =>
@@ -185,8 +189,8 @@ export default function SchoolSetup({ userId, onComplete }: SchoolSetupProps) {
                   <motion.button
                     key={school.schoolId}
                     onClick={() => handleSelectSchool(school)}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
                     className="glass-card"
                     style={{
                       width: "100%",
@@ -391,8 +395,8 @@ export default function SchoolSetup({ userId, onComplete }: SchoolSetupProps) {
                   <motion.button
                     key={classData.classId}
                     onClick={() => handleSelectClass(classData)}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
                     className="glass-card"
                     style={{
                       width: "100%",

@@ -12,7 +12,7 @@ interface ProfileSheetProps {
   matchCount: number;
   classmateCount: number;
   onClose: () => void;
-  onUpdateProfile: (name: string, gradient: number) => Promise<void>;
+  onUpdateProfile: (name: string, gradient: number, accentColor?: "orchid" | "mint" | "gold") => Promise<void>;
   onLeaveClass: () => void;
 }
 
@@ -25,6 +25,7 @@ export default function ProfileSheet({
   onLeaveClass,
 }: ProfileSheetProps) {
   const [gradient, setGradient] = useState(profile.avatarGradient ?? 0);
+  const [accentColor, setAccentColor] = useState<"orchid" | "mint" | "gold">(profile.accentColor ?? "orchid");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -41,11 +42,13 @@ export default function ProfileSheet({
   };
 
   const gradientChanged = gradient !== (profile.avatarGradient ?? 0);
+  const accentChanged = accentColor !== (profile.accentColor ?? "orchid");
+  const hasChanges = gradientChanged || accentChanged;
 
   const handleSave = async () => {
-    if (!gradientChanged || saving) return;
+    if (!hasChanges || saving) return;
     setSaving(true);
-    await onUpdateProfile(profile.name, gradient);
+    await onUpdateProfile(profile.name, gradient, accentColor);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2200);
@@ -184,11 +187,11 @@ export default function ProfileSheet({
             >
               <motion.div
                 animate={{
-                  boxShadow: [
-                    "0 0 0 3px rgba(155,109,255,0.2)",
-                    "0 0 0 6px rgba(155,109,255,0.35)",
-                    "0 0 0 3px rgba(155,109,255,0.2)",
-                  ],
+                  boxShadow: accentColor === "orchid"
+                    ? ["0 0 0 3px rgba(155,109,255,0.2)", "0 0 0 8px rgba(155,109,255,0.4)", "0 0 0 3px rgba(155,109,255,0.2)"]
+                    : accentColor === "mint"
+                    ? ["0 0 0 3px rgba(0,229,160,0.2)", "0 0 0 8px rgba(0,229,160,0.4)", "0 0 0 3px rgba(0,229,160,0.2)"]
+                    : ["0 0 0 3px rgba(254,225,64,0.2)", "0 0 0 8px rgba(254,225,64,0.4)", "0 0 0 3px rgba(254,225,64,0.2)"],
                 }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                 style={{ borderRadius: "50%" }}
@@ -347,7 +350,75 @@ export default function ProfileSheet({
           </div>
         </div>
 
-        {/* ─── Colour Picker ───────────────────────────────── */}
+        {/* ─── Accent / Vibe Colour ────────────────────────── */}
+        <div style={{ padding: "0 20px", marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.38)" }}>
+              Vibe Colour
+            </label>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)" }}>shows on your card</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {([
+              { key: "orchid" as const, color: "#9b6dff", label: "Violet", bg: "rgba(155,109,255,0.12)", glow: "rgba(155,109,255,0.45)" },
+              { key: "mint" as const, color: "#00e5a0", label: "Mint", bg: "rgba(0,229,160,0.10)", glow: "rgba(0,229,160,0.40)" },
+              { key: "gold" as const, color: "#fee140", label: "Gold", bg: "rgba(254,225,64,0.10)", glow: "rgba(254,225,64,0.40)" },
+            ]).map(({ key, color, label, bg, glow }) => {
+              const isActive = accentColor === key;
+              return (
+                <motion.button
+                  key={key}
+                  onClick={() => setAccentColor(key)}
+                  whileTap={{ scale: 0.94 }}
+                  whileHover={{ scale: 1.03 }}
+                  style={{
+                    padding: "18px 10px 14px",
+                    borderRadius: 18,
+                    border: isActive ? `2px solid ${color}` : "1px solid rgba(255,255,255,0.09)",
+                    background: isActive ? bg : "rgba(255,255,255,0.03)",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column" as const,
+                    alignItems: "center",
+                    gap: 8,
+                    position: "relative" as const,
+                    overflow: "hidden",
+                    boxShadow: isActive ? `0 0 24px ${glow}` : "none",
+                    fontFamily: "inherit",
+                    transition: "border 0.2s, background 0.2s, box-shadow 0.2s",
+                  }}
+                >
+                  {/* Radial glow behind orb */}
+                  {isActive && (
+                    <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 80, height: 80, borderRadius: "50%", background: `radial-gradient(circle, ${glow} 0%, transparent 70%)`, filter: "blur(12px)", pointerEvents: "none" }} />
+                  )}
+                  <motion.div
+                    animate={isActive ? { boxShadow: [`0 0 0 0 ${glow}`, `0 0 16px 4px ${glow}`, `0 0 0 0 ${glow}`] } : {}}
+                    transition={{ duration: 2.2, repeat: Infinity }}
+                    style={{ width: 30, height: 30, borderRadius: "50%", background: color, position: "relative", zIndex: 1, flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: isActive ? color : "rgba(255,255,255,0.35)", position: "relative", zIndex: 1 }}>
+                    {label}
+                  </span>
+                  {isActive && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 24 }}
+                      style={{ position: "absolute", top: 7, right: 7, width: 16, height: 16, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#07070f" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </motion.div>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ─── Avatar Colour Picker ─────────────────────────── */}
         <div style={{ padding: "0 20px", marginBottom: 28 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <label
@@ -359,9 +430,9 @@ export default function ProfileSheet({
                 color: "rgba(255,255,255,0.38)",
               }}
             >
-              Your Colour
+              Avatar Colour
             </label>
-            {gradientChanged && (
+            {hasChanges && (
               <motion.span
                 initial={{ opacity: 0, x: 8 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -437,14 +508,14 @@ export default function ProfileSheet({
         {/* ─── Save button ─────────────────────────────────── */}
         <div style={{ padding: "0 20px", marginBottom: 14 }}>
           <AnimatePresence>
-            {(gradientChanged || saved) && (
+            {(hasChanges || saved) && (
               <motion.button
                 key="save-btn"
                 initial={{ opacity: 0, y: 12, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 12, scale: 0.97 }}
                 onClick={handleSave}
-                disabled={saving || (!gradientChanged && !saved)}
+                disabled={saving || (!hasChanges && !saved)}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 style={{
@@ -469,7 +540,7 @@ export default function ProfileSheet({
                   transition: "background 0.3s, box-shadow 0.3s",
                 }}
               >
-                {saved ? "✓  Colour Saved" : saving ? "Saving…" : "Save Colour"}
+                {saved ? "✓  Saved" : saving ? "Saving…" : "Save Changes"}
               </motion.button>
             )}
           </AnimatePresence>

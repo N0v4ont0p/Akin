@@ -10,6 +10,7 @@ interface AkinConfirmProps {
   target: UserProfile | null;
   myName: string;
   myGradient: number;
+  currentPickCount: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -18,9 +19,12 @@ export default function AkinConfirm({
   target,
   myName,
   myGradient,
+  currentPickCount,
   onConfirm,
   onCancel,
 }: AkinConfirmProps) {
+  // If this pick would be their 1st (currently 0), mutual = instant reveal
+  const isFirstPick = currentPickCount === 0;
   useEffect(() => {
     if (target) {
       document.body.style.overflow = "hidden";
@@ -37,7 +41,7 @@ export default function AkinConfirm({
             key="akin-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.08 } }}
             transition={{ duration: 0.3 }}
             onClick={onCancel}
             style={{
@@ -76,19 +80,39 @@ export default function AkinConfirm({
                 borderRadius: "32px 32px 0 0",
                 border: "1px solid rgba(155,109,255,0.2)",
                 borderBottom: "none",
-                boxShadow: "0 -28px 80px rgba(155,109,255,0.3), 0 -4px 40px rgba(0,0,0,0.7)",
+                boxShadow: isFirstPick
+                  ? "0 -28px 80px rgba(255,200,80,0.4), 0 -4px 40px rgba(0,0,0,0.7)"
+                  : "0 -28px 80px rgba(155,109,255,0.3), 0 -4px 40px rgba(0,0,0,0.7)",
                 overflow: "hidden",
                 maxHeight: "93vh",
                 overflowY: "auto",
                 paddingBottom: "max(32px, env(safe-area-inset-bottom))",
+                position: "relative",
               }}
             >
+              {/* Dramatic ambient glow at top of sheet */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: "200%",
+                  height: 280,
+                  background: isFirstPick
+                    ? "radial-gradient(ellipse at 50% 0%, rgba(255,200,80,0.18) 0%, transparent 70%)"
+                    : "radial-gradient(ellipse at 50% 0%, rgba(155,109,255,0.14) 0%, transparent 70%)",
+                  pointerEvents: "none",
+                  zIndex: 0,
+                }}
+              />
+
               {/* Drag handle */}
-              <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 0" }}>
+              <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 0", position: "relative", zIndex: 1 }}>
                 <div style={{ width: 40, height: 4, borderRadius: 999, background: "rgba(255,255,255,0.12)" }} />
               </div>
 
-              {/* ── Pre-Commitment Shield ─────────────────────────────────────── */}
+              {/* ── Reveal type signal ─────────────────────────────────────── */}
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -96,38 +120,47 @@ export default function AkinConfirm({
                 style={{
                   margin: "20px 24px 0",
                   borderRadius: 16,
-                  background: "rgba(255,200,50,0.07)",
-                  border: "1px solid rgba(255,200,50,0.18)",
+                  background: isFirstPick ? "rgba(255,215,80,0.07)" : "rgba(137,247,254,0.06)",
+                  border: `1px solid ${isFirstPick ? "rgba(255,215,80,0.2)" : "rgba(137,247,254,0.18)"}`,
                   padding: "12px 16px",
                   display: "flex",
                   alignItems: "flex-start",
                   gap: 10,
+                  position: "relative",
+                  zIndex: 1,
                 }}
               >
-                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>⚠️</span>
+                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{isFirstPick ? "✦" : "❄️"}</span>
                 <div>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: "rgba(255,210,80,0.9)",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      marginBottom: 4,
-                    }}
-                  >
-                    The Gravity of Choice
+                  <p style={{ fontSize: 12, fontWeight: 800, color: isFirstPick ? "rgba(255,215,80,0.9)" : "rgba(137,247,254,0.85)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
+                    {isFirstPick ? "Slot 1 of 4 — Instant Reveal" : `Slot ${currentPickCount + 1} of 4 — Mystery Reveal`}
                   </p>
-                  <p style={{ fontSize: 12, color: "rgba(255,210,80,0.6)", lineHeight: 1.5 }}>
-                    This is your <strong style={{ color: "rgba(255,210,80,0.85)" }}>only active pick</strong>. If you release them later, your class feed frosts over for{" "}
-                    <strong style={{ color: "rgba(255,210,80,0.85)" }}>24 hours</strong>.
-                    Choose wisely.
+                  <p style={{ fontSize: 12, color: isFirstPick ? "rgba(255,215,80,0.6)" : "rgba(137,247,254,0.5)", lineHeight: 1.5 }}>
+                    {isFirstPick
+                      ? <>Your <strong style={{ color: "rgba(255,215,80,0.85)" }}>only active pick</strong>. If they pick you back, their identity reveals <strong style={{ color: "rgba(255,215,80,0.85)" }}>immediately</strong> — no waiting, all facts shown.</>
+                      : <>You have {currentPickCount} active pick{currentPickCount > 1 ? "s" : ""}. A mutual match enters the <strong style={{ color: "rgba(137,247,254,0.8)" }}>48h mystery reveal</strong> — clues drip every 16h.</>
+                    }
                   </p>
                 </div>
               </motion.div>
 
               {/* Avatar section */}
-              <div style={{ padding: "28px 28px 0", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ padding: "28px 28px 0", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}>
+                {/* Floating particles for instant reveal */}
+                {isFirstPick && (
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 200, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+                    {[...Array(6)].map((_, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 100, x: (i - 2.5) * 40 }}
+                        animate={{ opacity: [0, 0.8, 0], y: -80, x: (i - 2.5) * 40 + (i % 2 ? 20 : -20) }}
+                        transition={{ duration: 2.4, delay: i * 0.25, repeat: Infinity, ease: "easeOut" }}
+                        style={{ position: "absolute", bottom: 0, left: "50%", width: 4, height: 4, borderRadius: "50%", background: "#fee140", boxShadow: "0 0 8px #fee140" }}
+                      />
+                    ))}
+                  </div>
+                )}
+
                 {/* Pulsing halo rings */}
                 <div style={{ position: "relative", marginBottom: 20 }}>
                   <motion.div
@@ -137,7 +170,7 @@ export default function AkinConfirm({
                       position: "absolute",
                       inset: -28,
                       borderRadius: "50%",
-                      background: "rgba(155,109,255,0.15)",
+                      background: isFirstPick ? "rgba(255,200,80,0.15)" : "rgba(155,109,255,0.15)",
                       pointerEvents: "none",
                     }}
                   />
@@ -148,12 +181,16 @@ export default function AkinConfirm({
                       position: "absolute",
                       inset: -14,
                       borderRadius: "50%",
-                      border: "2px solid rgba(155,109,255,0.35)",
+                      border: isFirstPick ? "2px solid rgba(255,200,80,0.35)" : "2px solid rgba(155,109,255,0.35)",
                       pointerEvents: "none",
                     }}
                   />
                   <motion.div
-                    animate={{ boxShadow: ["0 0 0 0px rgba(155,109,255,0.5)", "0 0 0 10px rgba(155,109,255,0.0)", "0 0 0 0px rgba(155,109,255,0.5)"] }}
+                    animate={{
+                      boxShadow: isFirstPick
+                        ? ["0 0 0 0px rgba(255,200,80,0.5)", "0 0 0 10px rgba(255,200,80,0.0)", "0 0 0 0px rgba(255,200,80,0.5)"]
+                        : ["0 0 0 0px rgba(155,109,255,0.5)", "0 0 0 10px rgba(155,109,255,0.0)", "0 0 0 0px rgba(155,109,255,0.5)"],
+                    }}
                     transition={{ duration: 2.2, repeat: Infinity }}
                     style={{ borderRadius: "50%" }}
                   >
@@ -161,8 +198,12 @@ export default function AkinConfirm({
                       gradient={target.avatarGradient ?? 0}
                       name={target.name}
                       size={112}
-                      border="4px solid rgba(155,109,255,0.5)"
-                      style={{ boxShadow: "0 14px 50px rgba(155,109,255,0.4)" }}
+                      border={isFirstPick ? "4px solid rgba(255,200,80,0.7)" : "4px solid rgba(155,109,255,0.5)"}
+                      style={{
+                        boxShadow: isFirstPick
+                          ? "0 14px 50px rgba(255,200,80,0.5)"
+                          : "0 14px 50px rgba(155,109,255,0.4)",
+                      }}
                     />
                   </motion.div>
                 </div>
@@ -186,12 +227,19 @@ export default function AkinConfirm({
               </div>
 
               {/* Headline */}
-              <div style={{ padding: "0 28px", textAlign: "center", marginBottom: 20 }}>
+              <div style={{ padding: "0 28px", textAlign: "center", marginBottom: 20, position: "relative", zIndex: 1 }}>
                 <motion.h1
                   initial={{ opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.18, type: "spring", stiffness: 280, damping: 22 }}
-                  style={{ fontSize: "clamp(20px,5vw,24px)", fontWeight: 900, letterSpacing: "-0.025em", color: "#f0f0f5", marginBottom: 8, lineHeight: 1.2 }}
+                  style={{
+                    fontSize: "clamp(20px,5vw,24px)",
+                    fontWeight: 900,
+                    letterSpacing: "-0.025em",
+                    color: isFirstPick ? "rgba(255,220,100,0.95)" : "#f0f0f5",
+                    marginBottom: 8,
+                    lineHeight: 1.2,
+                  }}
                 >
                   Make {target.name.split(" ")[0]} your Akin?
                 </motion.h1>
@@ -201,9 +249,10 @@ export default function AkinConfirm({
                   transition={{ delay: 0.3 }}
                   style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.65, maxWidth: 300, margin: "0 auto" }}
                 >
-                  One person. Locked for{" "}
-                  <strong style={{ color: "rgba(155,109,255,0.85)" }}>48 hours</strong>.
-                  If mutual — it's Akin.
+                  {isFirstPick
+                    ? <>Locked for <strong style={{ color: "rgba(155,109,255,0.85)" }}>48 hours</strong>. One pick. If mutual — you both see everything <strong style={{ color: "rgba(255,215,80,0.75)" }}>right now</strong>.</>
+                    : <>Locked for <strong style={{ color: "rgba(155,109,255,0.85)" }}>48 hours</strong>. If mutual — 48h mystery, 3 clues, then the full reveal.</>
+                  }
                 </motion.p>
               </div>
 
@@ -212,13 +261,13 @@ export default function AkinConfirm({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.38 }}
-                style={{ margin: "0 24px 20px", borderRadius: 16, background: "rgba(155,109,255,0.07)", border: "1px solid rgba(155,109,255,0.14)", padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}
+                style={{ margin: "0 24px 20px", borderRadius: 16, background: "rgba(155,109,255,0.07)", border: "1px solid rgba(155,109,255,0.14)", padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10, position: "relative", zIndex: 1 }}
               >
                 {[
-                  { icon: "🛡️", text: "One pick — your only active Akin choice" },
-                  { icon: "⏱️", text: "48-hour lock — no impulse changes" },
-                  { icon: "🔥", text: "Release penalty: 24h feed frost" },
-                  { icon: "✦", text: "Mutual pick = Akin Bond unlocked" },
+                  { icon: "🗂️", text: `Slot ${currentPickCount + 1} of 4 — pick up to 4 people at once` },
+                  { icon: "⏱️", text: "48-hour lock per pick — no impulse changes" },
+                  { icon: "🔥", text: "Release during lock = 24h feed frost" },
+                  { icon: isFirstPick ? "✦" : "❄️", text: isFirstPick ? "1 active pick + mutual = instant full reveal" : "2+ active picks + mutual = 48h mystery clues" },
                 ].map((item, i) => (
                   <motion.div
                     key={i}
@@ -238,7 +287,7 @@ export default function AkinConfirm({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.52 }}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 24, padding: "0 28px" }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 24, padding: "0 28px", position: "relative", zIndex: 1 }}
               >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                   <GradientAvatar gradient={myGradient} name={myName} size={40} border="2px solid rgba(155,109,255,0.35)" />
@@ -247,7 +296,15 @@ export default function AkinConfirm({
                 <motion.span
                   animate={{ scale: [1, 1.35, 1], opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 1.8, repeat: Infinity }}
-                  style={{ fontSize: 20, background: "linear-gradient(135deg, #9b6dff, #00e5a0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}
+                  style={{
+                    fontSize: 20,
+                    background: isFirstPick
+                      ? "linear-gradient(135deg, #fee140, #ffb347)"
+                      : "linear-gradient(135deg, #9b6dff, #00e5a0)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}
                 >
                   ✦
                 </motion.span>
@@ -257,12 +314,22 @@ export default function AkinConfirm({
                 </div>
               </motion.div>
 
+              {/* Reciprocity nudge */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.58 }}
+                style={{ fontSize: 12, color: "rgba(155,109,255,0.6)", textAlign: "center", marginBottom: 16, fontStyle: "italic", letterSpacing: "0.02em", position: "relative", zIndex: 1 }}
+              >
+                💫 They may have already noticed you.
+              </motion.p>
+
               {/* Slide to Lock CTA */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 24 }}
-                style={{ padding: "0 24px 12px", display: "flex", flexDirection: "column", gap: 12 }}
+                style={{ padding: "0 24px 12px", display: "flex", flexDirection: "column", gap: 12, position: "relative", zIndex: 1 }}
               >
                 <SlideToLock
                   label={`Slide to pick ${target.name.split(" ")[0]}`}

@@ -47,22 +47,22 @@ const FEATURE_SLIDES = [
     icon: "✦",
     iconColor: "#9b6dff",
     glowColor: "rgba(155,109,255,0.35)",
-    heading: "One Akin. That's it.",
-    body: "You get one pick in your class. Not ten. Not unlimited. One. Choose the person who just gets it.",
+    heading: "Up to 4 Akin Picks",
+    body: "Pick up to 4 classmates you feel Akin to — simultaneously. Quality over quantity. Every pick is a real commitment, locked for 48 hours.",
+  },
+  {
+    icon: "⚡",
+    iconColor: "#fee140",
+    glowColor: "rgba(254,225,64,0.40)",
+    heading: "1 pick = instant reveal",
+    body: "If you only have one active pick and they pick you back — identity reveals immediately. No waiting. All facts shown. This is the rarest, most intimate outcome.",
   },
   {
     icon: "❄️",
     iconColor: "#00e5ff",
     glowColor: "rgba(0,229,255,0.30)",
-    heading: "Matches reveal over time",
-    body: "When you and someone both pick each other, your connection unfolds in 3 stages over 72 hours. No instant gratification.",
-  },
-  {
-    icon: "⚡",
-    iconColor: "#fee140",
-    glowColor: "rgba(254,225,64,0.30)",
-    heading: "Feel the room",
-    body: "Anonymous daily polls let you gauge the energy in your class. Vote to see results.",
+    heading: "2–4 picks = mystery reveal",
+    body: "Multiple picks? A mutual match enters the 48h mystery timeline — 3 clues drop every 16 hours until full reveal. The anticipation is the experience.",
   },
 ];
 
@@ -130,7 +130,8 @@ export default function OnboardingPage() {
     }
   };
 
-  if (loading || !user) {
+  // Show spinner whenever we're loading OR about to redirect — prevents flash
+  if (loading || !user || profile?.classId || profile?.name) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <motion.div
@@ -703,7 +704,7 @@ export default function OnboardingPage() {
                   padding: "16px 18px",
                 }}>
                   <p style={{ fontSize: 13, fontWeight: 800, color: "#00e5a0", marginBottom: 2 }}>🌒 The Context</p>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed after 24 hours</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed after 16 hours</p>
 
                   <label style={{ fontSize: 11, fontWeight: 700, color: "rgba(0,229,160,0.6)", textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
                     🎓 Your Major
@@ -757,7 +758,7 @@ export default function OnboardingPage() {
                   padding: "16px 18px",
                 }}>
                   <p style={{ fontSize: 13, fontWeight: 800, color: "#9b6dff", marginBottom: 2 }}>✦ The Shared Secret</p>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed only at the Akin Bond — 72 hours</p>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 12 }}>Revealed only at full Akin Bond — 48 hours</p>
                   <textarea
                     value={facts.deepFact}
                     onChange={e => setFacts(f => ({ ...f, deepFact: e.target.value }))}
@@ -850,10 +851,10 @@ export default function OnboardingPage() {
                 </p>
                 <ul style={{ margin: 0, padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {[
-                    "One pick per class — choose who just gets you",
-                    "If you release your pick, your feed frosts for 24 hours",
-                    "Connections reveal in 4 stages over 72 hours",
-                    "This is real — no fake profiles, no second chances",
+                    "Up to 4 simultaneous picks — each locked for 48 hours",
+                    "1 active pick + mutual = instant full reveal ✦",
+                    "2–4 picks + mutual = 48h mystery, 3 clues every 16h",
+                    "Release during lock = 24h feed frost — no second chances",
                   ].map((rule, i) => (
                     <li key={i} style={{ fontSize: 13, color: "rgba(255,255,255,0.52)", lineHeight: 1.6 }}>
                       {rule}

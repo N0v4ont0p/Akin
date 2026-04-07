@@ -53,32 +53,32 @@ const TIER_CONFIG: Record<
   echo: {
     label: "The Echo",
     icon: "🌑",
-    desc: "A connection is forming. Their identity is hidden for now.",
+    desc: "Identity sealed. First clue drops at 16h.",
     color: "#89f7fe",
     bg: "rgba(137,247,254,0.07)",
     border: "rgba(137,247,254,0.2)",
-    timerLabel: "reveals in",
-    nextLabel: "Recognition",
+    timerLabel: "first clue in",
+    nextLabel: "First Clue",
   },
   recognition: {
-    label: "Recognition",
+    label: "First Clue",
     icon: "🌒",
-    desc: "Getting closer. More clues unlocked.",
+    desc: "First hint unlocked — who fits?",
     color: "#00e5a0",
     bg: "rgba(0,229,160,0.07)",
     border: "rgba(0,229,160,0.22)",
-    timerLabel: "name reveals in",
-    nextLabel: "Identification",
+    timerLabel: "second clue in",
+    nextLabel: "Second Clue",
   },
   identification: {
-    label: "Identification",
+    label: "Second Clue",
     icon: "🌓",
-    desc: "You know who they are. Now what?",
+    desc: "Second hint revealed. Getting warmer...",
     color: "#fee140",
     bg: "rgba(254,225,64,0.07)",
     border: "rgba(254,225,64,0.2)",
-    timerLabel: "bond in",
-    nextLabel: "Akin Bond",
+    timerLabel: "reveal in",
+    nextLabel: "Full Reveal",
   },
   bond: {
     label: "Akin Bond",
@@ -96,38 +96,36 @@ const TIER_CONFIG: Record<
 
 function useLiveProgress(match: MatchData) {
   function compute() {
-    // Delegate to firestore's getMatchTierProgress for timing data,
-    // then re-map the 3-tier result onto 4 tiers.
-    // Thresholds: 0-24h = echo, 24-48h = recognition, 48-72h = identification, 72h+ = bond
+    // Thresholds: 0-16h = echo, 16-32h = recognition, 32-48h = identification, 48h+ = bond
     const raw = getMatchTierProgress(match.createdAt);
     const ageMs = raw.ageMs;
-    const h24 = 86_400_000;
+    const h16 = 57_600_000;
+    const h32 = 115_200_000;
     const h48 = 172_800_000;
-    const h72 = 259_200_000;
 
-    if (ageMs >= h72) {
+    if (ageMs >= h48) {
       return { tier: "bond" as MatchTier, progressToNext: 1, msToNext: 0, ageMs };
     }
-    if (ageMs >= h48) {
+    if (ageMs >= h32) {
       return {
         tier: "identification" as MatchTier,
-        progressToNext: (ageMs - h48) / (h72 - h48),
-        msToNext: h72 - ageMs,
+        progressToNext: (ageMs - h32) / (h48 - h32),
+        msToNext: h48 - ageMs,
         ageMs,
       };
     }
-    if (ageMs >= h24) {
+    if (ageMs >= h16) {
       return {
         tier: "recognition" as MatchTier,
-        progressToNext: (ageMs - h24) / (h48 - h24),
-        msToNext: h48 - ageMs,
+        progressToNext: (ageMs - h16) / (h32 - h16),
+        msToNext: h32 - ageMs,
         ageMs,
       };
     }
     return {
       tier: "echo" as MatchTier,
-      progressToNext: ageMs / h24,
-      msToNext: h24 - ageMs,
+      progressToNext: ageMs / h16,
+      msToNext: h16 - ageMs,
       ageMs,
     };
   }
@@ -181,22 +179,22 @@ function getHintContent(
   switch (tier) {
     case "echo":
       return {
-        label: "Comfort Food",
-        content: facts?.comfortFood ?? "A clue reveals in 24 hours...",
+        label: "Mystery",
+        content: "Identity sealed. Your first clue unlocks at 16h.",
       };
-    case "recognition": {
+    case "recognition":
+      return {
+        label: "Comfort Food",
+        content: facts?.comfortFood ?? "Clue loading...",
+      };
+    case "identification": {
       const major = facts?.major;
       const campusVibe = facts?.campusVibe;
       if (major && campusVibe) return { label: "About Them", content: `${major} · ${campusVibe}` };
       if (major) return { label: "Their Major", content: major };
       if (campusVibe) return { label: "Campus Vibe", content: campusVibe };
-      return { label: "Getting Closer", content: "More clues unlocking soon..." };
+      return { label: "Second Clue", content: "Another hint just dropped..." };
     }
-    case "identification":
-      return {
-        label: "✨ Name Revealed",
-        content: "Name revealed! Find them.",
-      };
     case "bond":
       return {
         label: "✦ Deep Fact",
@@ -265,13 +263,13 @@ export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: Matc
       <motion.div
         whileHover={{ scale: 1.012, y: -2 }}
         whileTap={{ scale: 0.985 }}
-        transition={{ type: "spring", stiffness: 380, damping: 28 }}
+        animate={{ boxShadow: [`0 0 0px ${cfg.color}00`, `0 0 24px ${cfg.color}22`, `0 0 0px ${cfg.color}00`] }}
+        transition={{ type: "spring", stiffness: 380, damping: 28, boxShadow: { duration: 4, repeat: Infinity, ease: "easeInOut" } }}
         style={{
           borderRadius: 24,
           overflow: "hidden",
           background: cfg.bg,
           border: `1px solid ${cfg.border}`,
-          boxShadow: `0 8px 32px ${cfg.bg}, 0 2px 8px rgba(0,0,0,0.35)`,
           position: "relative",
           cursor: "pointer",
         }}
@@ -344,6 +342,15 @@ export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: Matc
 
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                  {tier !== "bond" && (
+                    <motion.span
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                      style={{ fontSize: 12 }}
+                    >
+                      {cfg.icon}
+                    </motion.span>
+                  )}
                   <span
                     style={{
                       fontSize: 12,
@@ -353,7 +360,6 @@ export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: Matc
                       textTransform: "uppercase",
                     }}
                   >
-                    {tier !== "bond" ? `${cfg.icon} ` : ""}
                     {cfg.label}
                   </span>
                   {isAkin && (
@@ -415,7 +421,7 @@ export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: Matc
                   </p>
                   <p
                     style={{
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: 800,
                       color: cfg.color,
                       letterSpacing: "-0.01em",
@@ -750,16 +756,31 @@ export default function MatchTierCard({ match, myUserId, onOpenSyncModal }: Matc
               >
                 {hint.label}
               </p>
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "rgba(255,255,255,0.6)",
-                  lineHeight: 1.5,
-                  fontStyle: "italic",
-                }}
-              >
-                {hint.content}
-              </p>
+              {tier !== "echo" ? (
+                <motion.p
+                  animate={{ opacity: [0.7, 1, 0.7], color: [cfg.color + "99", cfg.color + "cc", cfg.color + "99"] }}
+                  transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    fontStyle: "italic",
+                    textShadow: `0 0 12px ${cfg.color}44`,
+                  }}
+                >
+                  {hint.content}
+                </motion.p>
+              ) : (
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "rgba(255,255,255,0.6)",
+                    lineHeight: 1.5,
+                    fontStyle: "italic",
+                  }}
+                >
+                  {hint.content}
+                </p>
+              )}
             </motion.div>
           </AnimatePresence>
 

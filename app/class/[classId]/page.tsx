@@ -13,6 +13,7 @@ import ProfileSheet from "@/components/ProfileSheet";
 import RefrostOverlay from "@/components/RefrostOverlay";
 import VibeCheckSheet from "@/components/VibeCheckSheet";
 import SyncModal from "@/components/SyncModal";
+import GradientAvatar from "@/components/GradientAvatar";
 import { Timestamp } from "firebase/firestore";
 import {
   getClass,
@@ -30,23 +31,192 @@ import {
   submitVibeResponse,
   subscribeToVibeCheck,
   getMatchTierProgress,
+  getUserProfile,
   ClassData,
   UserProfile,
   MatchData,
   VibeCheck,
+  AkinPick,
 } from "@/lib/firestore";
 
 interface PendingMatch {
   matchGradient: number;
   matchName: string;
+  matchUserId: string;
   isAkin?: boolean;
+  isInstantReveal?: boolean;
+  matchFacts?: UserProfile["facts"] | null;
+}
+
+// ─── Timeline Tab ─────────────────────────────────────────────────────────────
+const TIMELINE_STAGES = [
+  { hour: 0, label: "Echo", icon: "🌑", color: "#89f7fe" },
+  { hour: 16, label: "First Clue", icon: "🌒", color: "#00e5a0" },
+  { hour: 32, label: "Second Clue", icon: "🌓", color: "#fee140" },
+  { hour: 48, label: "Full Reveal", icon: "✦", color: "#9b6dff" },
+];
+
+function TimelineTab({ akinPicks, matches, myUserId, onViewMatch }: {
+  akinPicks: AkinPick[];
+  matches: MatchData[];
+  myUserId: string;
+  onViewMatch: (match: MatchData) => void;
+}) {
+  if (akinPicks.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ padding: "60px 28px", textAlign: "center" }}
+      >
+        <div style={{ position: "relative", width: 80, height: 80, margin: "0 auto 28px" }}>
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+            style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "1.5px dashed rgba(155,109,255,0.25)" }} />
+          <div style={{ position: "absolute", inset: 18, borderRadius: "50%", background: "rgba(155,109,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 20 }}>⏳</span>
+          </div>
+        </div>
+        <h3 style={{ fontSize: 20, fontWeight: 900, color: "#f0f0f5", letterSpacing: "-0.02em", marginBottom: 10 }}>
+          Your timeline is empty
+        </h3>
+        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.4)", lineHeight: 1.7, maxWidth: 240, margin: "0 auto" }}>
+          Pick your Akin in Browse. A mutual match starts the 48h reveal here.
+        </p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "20px 18px 24px" }}>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-0.02em", color: "#f0f0f5", marginBottom: 4 }}>Your Timeline</h2>
+        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{akinPicks.length} active pick{akinPicks.length > 1 ? "s" : ""} · mutual matches reveal here</p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {akinPicks.map((pick, idx) => {
+          const matchForPick = matches.find(m =>
+            (m.user1Id === myUserId && m.user2Id === pick.pickedId) ||
+            (m.user2Id === myUserId && m.user1Id === pick.pickedId)
+          );
+          const isMutual = !!matchForPick;
+          const expiresAtMs = pick.expiresAt?.toMillis() ?? 0;
+          const isLocked = expiresAtMs > Date.now();
+
+          let elapsedHours = 0;
+          let stageIndex = 0;
+          if (isMutual && matchForPick.createdAt) {
+            elapsedHours = Math.max(0, (Date.now() - matchForPick.createdAt.toMillis()) / 3_600_000);
+            stageIndex = TIMELINE_STAGES.filter(s => elapsedHours >= s.hour).length - 1;
+          }
+
+          return (
+            <motion.div
+              key={pick.pickedId}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.06, type: "spring", stiffness: 320, damping: 28 }}
+              style={{
+                borderRadius: 20,
+                border: isMutual ? "1px solid rgba(155,109,255,0.3)" : "1px solid rgba(255,255,255,0.08)",
+                background: isMutual ? "rgba(155,109,255,0.07)" : "rgba(255,255,255,0.03)",
+                padding: "16px 18px",
+                boxShadow: isMutual ? "0 0 24px rgba(155,109,255,0.08)" : "none",
+              }}
+            >
+              {/* Pick header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: isMutual ? 18 : 0 }}>
+                <GradientAvatar
+                  gradient={pick.pickedGradient ?? 0}
+                  name={pick.pickedName ?? "?"}
+                  size={44}
+                  border={isMutual ? "2px solid rgba(155,109,255,0.5)" : "1.5px solid rgba(255,255,255,0.12)"}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: "#f0f0f5", letterSpacing: "-0.01em" }}>
+                    {pick.pickedName}
+                  </p>
+                  {isMutual ? (
+                    <p style={{ fontSize: 11, color: "rgba(155,109,255,0.8)", fontWeight: 700 }}>
+                      ✦ Mutual Akin — {Math.floor(elapsedHours)}h in
+                    </p>
+                  ) : (
+                    <p style={{ fontSize: 11, color: isLocked ? "rgba(155,109,255,0.5)" : "rgba(255,255,255,0.3)", fontWeight: 600 }}>
+                      {isLocked ? "🔒 Waiting for them to pick you back…" : "Unlocked — no mutual yet"}
+                    </p>
+                  )}
+                </div>
+                {isMutual && (
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => onViewMatch(matchForPick)}
+                    style={{ background: "rgba(155,109,255,0.12)", border: "1px solid rgba(155,109,255,0.25)", borderRadius: 10, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 11, color: "rgba(155,109,255,0.85)", fontWeight: 700, whiteSpace: "nowrap" }}
+                  >
+                    Detail ↗
+                  </motion.button>
+                )}
+              </div>
+
+              {/* Mystery timeline — only for mutual matches */}
+              {isMutual && (
+                <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                  {TIMELINE_STAGES.map((stage, si) => {
+                    const isPast = si <= stageIndex;
+                    const isCurrent = si === stageIndex;
+                    const isLast = si === TIMELINE_STAGES.length - 1;
+                    return (
+                      <React.Fragment key={stage.label}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: isLast ? 0 : undefined }}>
+                          <motion.div
+                            animate={isCurrent ? { boxShadow: [`0 0 0 0 ${stage.color}00`, `0 0 0 5px ${stage.color}44`, `0 0 0 0 ${stage.color}00`] } : {}}
+                            transition={{ duration: 1.8, repeat: Infinity }}
+                            style={{
+                              width: 28, height: 28, borderRadius: "50%",
+                              background: isPast ? stage.color : "rgba(255,255,255,0.05)",
+                              border: `2px solid ${isPast ? stage.color : "rgba(255,255,255,0.12)"}`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12,
+                              boxShadow: isPast ? `0 0 12px ${stage.color}55` : "none",
+                            }}
+                          >
+                            {isPast ? <span>{stage.icon}</span> : <span style={{ opacity: 0.25, fontSize: 10 }}>?</span>}
+                          </motion.div>
+                          <span style={{ fontSize: 8, fontWeight: 700, color: isPast ? stage.color : "rgba(255,255,255,0.2)", textAlign: "center", maxWidth: 40, lineHeight: 1.2 }}>{stage.label}</span>
+                        </div>
+                        {!isLast && (
+                          <div style={{ flex: 1, height: 2, background: si < stageIndex ? `linear-gradient(90deg, ${stage.color}66, ${TIMELINE_STAGES[si+1].color}33)` : "rgba(255,255,255,0.06)", margin: "0 4px", marginBottom: 16 }} />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Psychological nudge — if picks have no mutual yet */}
+      {akinPicks.length > 0 && matches.length === 0 && (
+        <motion.div
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 3.5, repeat: Infinity }}
+          style={{ marginTop: 20, textAlign: "center" }}
+        >
+          <p style={{ fontSize: 12, color: "rgba(155,109,255,0.5)", fontStyle: "italic" }}>
+            The signal is out there. They just haven't picked yet.
+          </p>
+        </motion.div>
+      )}
+    </div>
+  );
 }
 
 export default function ClassPage() {
   const params = useParams();
   const classId = params.classId as string;
   const router = useRouter();
-  const { user, profile, loading: userLoading, akinPick, setProfile } = useUser();
+  const { user, profile, loading: userLoading, akinPicks, setProfile } = useUser();
 
   const [classData, setClassData] = useState<ClassData | null>(null);
   const [classmates, setClassmates] = useState<UserProfile[]>([]);
@@ -116,16 +286,16 @@ export default function ClassPage() {
     load();
   }, [userLoading, user, classId]);
 
-  // Sync akinPick's pickedId into likedIds so already-picked person never shows in browse
+  // Sync all picked IDs into likedIds so already-picked people never show in browse
   useEffect(() => {
-    if (akinPick?.pickedId) {
+    if (akinPicks.length > 0) {
       setLikedIds(prev => {
         const next = new Set(prev);
-        next.add(akinPick.pickedId!);
+        akinPicks.forEach(p => next.add(p.pickedId));
         return next;
       });
     }
-  }, [akinPick?.pickedId]);
+  }, [akinPicks]);
 
   // Real-time match subscription — uses localStorage to persist seen reveals across refreshes
   useEffect(() => {
@@ -157,11 +327,24 @@ export default function ClassPage() {
           previousMatchIds.current.add(match.matchId);
           markSeen(match.matchId);
           const isUser1 = match.user1Id === user.uid;
-          setPendingMatch({
+          const theirUserId = isUser1 ? match.user2Id : match.user1Id;
+          const isInstantReveal = isUser1 ? (match.user1InstantReveal ?? false) : (match.user2InstantReveal ?? false);
+          // Fetch their profile for facts (only needed for instant reveal)
+          const pending: PendingMatch = {
             matchGradient: isUser1 ? match.user2Gradient : match.user1Gradient,
             matchName: isUser1 ? match.user2Name : match.user1Name,
-            isAkin: (match as { isAkinMatch?: boolean }).isAkinMatch ?? false,
-          });
+            matchUserId: theirUserId,
+            isAkin: match.isAkinMatch ?? false,
+            isInstantReveal,
+            matchFacts: null,
+          };
+          if (isInstantReveal) {
+            getUserProfile(theirUserId).then(p => {
+              setPendingMatch({ ...pending, matchFacts: p?.facts ?? null });
+            });
+          } else {
+            setPendingMatch(pending);
+          }
           break;
         }
       }
@@ -204,14 +387,16 @@ export default function ClassPage() {
     await submitVibeResponse(vibeCheck.id, user.uid, optionIndex);
   }, [user, vibeCheck]);
 
-  const handleReleasePick = useCallback(async () => {
+  const handleReleasePick = useCallback(async (pickedId: string) => {
     if (!user) return;
-    await releaseAkinPick(user.uid, classId);
+    await releaseAkinPick(user.uid, pickedId, classId);
     showToast("Pick released — feed frosted for 24 hours ❄️");
   }, [user, classId]);
 
   const handleAkinPick = useCallback(async (classmate: UserProfile) => {
     if (!user || !profile) return;
+    // Optimistically remove from browse stack immediately — no UI stall
+    setLikedIds((prev) => new Set([...prev, classmate.userId]));
     try {
       const result = await setAkinPick(
         user.uid,
@@ -219,14 +404,18 @@ export default function ClassPage() {
         classId,
         { name: classmate.name, avatarGradient: classmate.avatarGradient ?? 0 }
       );
-      if (!result.success && result.cooldownRemaining) {
-        const h = Math.floor(result.cooldownRemaining / 3_600_000);
-        const m = Math.floor((result.cooldownRemaining % 3_600_000) / 60_000);
-        setCooldownToast(`Pick locked for ${h}h ${m}m — one pick at a time.`);
-        setTimeout(() => setCooldownToast(""), 4000);
+      if (!result.success) {
+        if (result.cooldownRemaining) {
+          const h = Math.floor(result.cooldownRemaining / 3_600_000);
+          const m = Math.floor((result.cooldownRemaining % 3_600_000) / 60_000);
+          setCooldownToast(`Already picked — locked for ${h}h ${m}m.`);
+          setTimeout(() => setCooldownToast(""), 4000);
+        } else if (result.slotsFull) {
+          setCooldownToast("All 4 Akin slots are full. Release one to pick again.");
+          setTimeout(() => setCooldownToast(""), 4000);
+        }
       } else {
-        setLikedIds((prev) => new Set([...prev, classmate.userId]));
-        showToast(`You picked ${classmate.name} as your Akin ✦`);
+        showToast(`Akin pick locked ✦`);
       }
     } catch (err) {
       console.error("Akin pick failed:", err);
@@ -240,18 +429,16 @@ export default function ClassPage() {
   }, [user, classId]);
 
   const handleOpenSyncModal = useCallback((match?: MatchData) => {
-    // If no specific match passed, use the akinPick match if found
-    const target = match ?? matches.find(m =>
-      (akinPick?.pickedId && (m.user1Id === akinPick.pickedId || m.user2Id === akinPick.pickedId))
-    ) ?? null;
+    const pickedIds = new Set(akinPicks.map(p => p.pickedId));
+    const target = match ?? matches.find(m => pickedIds.has(m.user1Id) || pickedIds.has(m.user2Id)) ?? null;
     setSyncModalMatch(target);
     setShowSyncModal(true);
-  }, [matches, akinPick]);
+  }, [matches, akinPicks]);
 
-  const handleUpdateProfile = useCallback(async (name: string, gradient: number) => {
+  const handleUpdateProfile = useCallback(async (name: string, gradient: number, accentColor?: "orchid" | "mint" | "gold") => {
     if (!user || !profile) return;
-    await updateUserProfile(user.uid, name, gradient);
-    setProfile({ ...profile, name, avatarGradient: gradient });
+    await updateUserProfile(user.uid, name, gradient, accentColor);
+    setProfile({ ...profile, name, avatarGradient: gradient, ...(accentColor ? { accentColor } : {}) });
   }, [user, profile, setProfile]);
 
   const handleLeaveClass = useCallback(async () => {
@@ -374,11 +561,38 @@ export default function ClassPage() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           style={{ display: activeTab === "browse" ? "block" : "none" }}
         >
-          <div style={{ padding: "18px 18px 0" }}>
+          {/* Ambient psychological hook — only when no picks and no matches */}
+          {akinPicks.length === 0 && matches.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.4 }}
+              style={{
+                margin: "14px 18px 0",
+                padding: "10px 14px",
+                borderRadius: 14,
+                background: "rgba(155,109,255,0.06)",
+                border: "1px solid rgba(155,109,255,0.15)",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2.2, repeat: Infinity }}
+                style={{ width: 7, height: 7, borderRadius: "50%", background: "#9b6dff", flexShrink: 0 }}
+              />
+              <p style={{ fontSize: 12, color: "rgba(155,109,255,0.75)", fontWeight: 600, lineHeight: 1.4 }}>
+                Someone in your class may have already picked you — pick your Akin to find out
+              </p>
+            </motion.div>
+          )}
+          <div style={{ padding: "14px 18px 0" }}>
             <AkinSlot
-              akinPick={akinPick}
+              akinPicks={akinPicks}
+              mutualPickIds={new Set(matches.map(m => m.user1Id === user?.uid ? m.user2Id : m.user1Id))}
               onReleasePick={handleReleasePick}
-              onOpenSyncModal={akinPick ? () => handleOpenSyncModal() : undefined}
             />
           </div>
           {/* Browse content — wrapped in a relative container for RefrostOverlay */}
@@ -388,6 +602,8 @@ export default function ClassPage() {
               alreadyLiked={likedIds}
               myName={profile?.name ?? "?"}
               myGradient={profile?.avatarGradient ?? 0}
+              myAccentColor={profile?.accentColor ?? "orchid"}
+              currentPickCount={akinPicks.length}
               onLike={handleAkinPick}
               onPass={handlePass}
               onAkinPick={handleAkinPick}
@@ -398,6 +614,20 @@ export default function ClassPage() {
               onExpired={() => setRefrostUntil(null)}
             />
           </div>
+        </motion.div>
+
+        {/* Timeline tab */}
+        <motion.div
+          animate={{ opacity: activeTab === "timeline" ? 1 : 0, x: activeTab === "timeline" ? 0 : 10 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          style={{ display: activeTab === "timeline" ? "block" : "none" }}
+        >
+          <TimelineTab
+            akinPicks={akinPicks}
+            matches={matches}
+            myUserId={user?.uid ?? ""}
+            onViewMatch={(match) => { handleOpenSyncModal(match); }}
+          />
         </motion.div>
 
         {/* Matches tab */}
@@ -486,6 +716,7 @@ export default function ClassPage() {
           <MatchesList
             matches={matches}
             myUserId={user?.uid ?? ""}
+            akinPickCount={akinPicks.length}
             onOpenSyncModal={handleOpenSyncModal}
           />
         </motion.div>
@@ -496,9 +727,11 @@ export default function ClassPage() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         matchCount={matches.length}
+        akinPickCount={akinPicks.length}
         onProfileTap={() => setShowProfile(true)}
         myGradient={profile?.avatarGradient ?? 0}
         myName={profile?.name ?? "?"}
+        myAccentColor={profile?.accentColor ?? "orchid"}
       />
 
       {/* ── Toasts ──────────────────────────────────────── */}
@@ -506,9 +739,9 @@ export default function ClassPage() {
         {toast && (
           <motion.div
             className="toast"
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
+            exit={{ opacity: 0, y: -12 }}
           >
             {toast}
           </motion.div>
@@ -523,7 +756,7 @@ export default function ClassPage() {
             exit={{ opacity: 0, y: 8 }}
             style={{
               position: "fixed",
-              bottom: "108px",
+              bottom: "calc(108px + env(safe-area-inset-bottom, 0px))",
               left: "50%",
               transform: "translateX(-50%)",
               background: "rgba(155,109,255,0.12)",
@@ -555,6 +788,8 @@ export default function ClassPage() {
             matchGradient={pendingMatch.matchGradient}
             matchName={pendingMatch.matchName}
             isAkin={pendingMatch.isAkin}
+            isInstantReveal={pendingMatch.isInstantReveal}
+            matchFacts={pendingMatch.matchFacts}
             onContinue={() => {
               setPendingMatch(null);
               setActiveTab("matches");

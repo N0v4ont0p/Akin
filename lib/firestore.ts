@@ -14,6 +14,7 @@ import {
   increment,
   deleteDoc,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -93,9 +94,8 @@ export interface UserProfile {
   email: string;
   photoURL: string;
   createdAt: Timestamp | null;
-  // Akin pick fields
-  akinPickId?: string | null;
-  akinPickedAt?: Timestamp | null;
+  // Akin pick fields (multi-slot: up to 4 simultaneous picks)
+  akinPickIds?: string[];
   refrostUntil?: Timestamp | null;
   sharedSecret?: string;
   facts?: {
@@ -123,6 +123,10 @@ export interface MatchData {
   user2Gradient: number;
   classId: string;
   createdAt: Timestamp | null;
+  isAkinMatch?: boolean;
+  // Instant reveal: true if that user had exactly 1 active pick when the match formed
+  user1InstantReveal?: boolean;
+  user2InstantReveal?: boolean;
 }
 
 export interface AkinPick {
@@ -367,36 +371,49 @@ export function subscribeToMatches(
   };
 }
 
-// ─── Akin Picks ──────────────────────────────────────────────────────────────
+// ─── Akin Picks (4-slot multi-pick system) ───────────────────────────────────
+// Doc ID: `${pickerId}_${pickedId}_${classId}` — one doc per directed pair.
+// Allows up to 4 simultaneous active picks per user per class.
+// Instant reveal fires when picker has exactly 1 active pick AND it's mutual.
 
 const COOLDOWN_MS = 48 * 60 * 60 * 1000; // 48 hours
+const MAX_PICKS = 4;
+
+/** Returns all active (unexpired) picks for a user in a class. */
+export async function getActiveAkinPicks(pickerId: string, classId: string): Promise<AkinPick[]> {
+  const q = query(collection(db, "akin_picks"), where("pickerId", "==", pickerId));
+  const snap = await getDocs(q);
+  const now = Date.now();
+  return snap.docs
+    .map(d => ({ pickId: d.id, ...(d.data() as Omit<AkinPick, "pickId">) }))
+    .filter(p => p.classId === classId && (!p.expiresAt || p.expiresAt.toMillis() > now));
+}
 
 export async function setAkinPick(
   pickerId: string,
   pickedId: string,
   classId: string,
   pickedProfile: { name: string; avatarGradient: number }
-): Promise<{ success: boolean; cooldownRemaining?: number }> {
-  const pickDocId = `${pickerId}_${classId}`;
+): Promise<{ success: boolean; cooldownRemaining?: number; slotsFull?: boolean }> {
+  // Check if this exact pick already exists and is still locked
+  const pickDocId = `${pickerId}_${pickedId}_${classId}`;
   const pickRef = doc(db, "akin_picks", pickDocId);
-
-  // Check existing pick
   const existing = await getDoc(pickRef);
   if (existing.exists()) {
     const data = existing.data();
     const expiresAt = data.expiresAt as Timestamp | null;
     if (expiresAt) {
       const remaining = expiresAt.toMillis() - Date.now();
-      if (remaining > 0) {
-        return { success: false, cooldownRemaining: remaining };
-      }
+      if (remaining > 0) return { success: false, cooldownRemaining: remaining };
     }
   }
 
-  const now = Date.now();
-  const expiresAtMs = now + COOLDOWN_MS;
+  // Enforce 4-slot cap
+  const activePicks = await getActiveAkinPicks(pickerId, classId);
+  if (activePicks.length >= MAX_PICKS) return { success: false, slotsFull: true };
 
-  // Write the pick document (only picker can read their own)
+  const expiresAtMs = Date.now() + COOLDOWN_MS;
+
   await setDoc(pickRef, {
     pickerId,
     pickedId,
@@ -407,17 +424,18 @@ export async function setAkinPick(
     expiresAt: Timestamp.fromMillis(expiresAtMs),
   });
 
-  // Update user profile with akinPickId and timestamp
   await updateDoc(doc(db, "users", pickerId), {
-    akinPickId: pickedId,
-    akinPickedAt: serverTimestamp(),
+    akinPickIds: arrayUnion(pickedId),
   });
 
-  // Check for mutual match — this is the only place we check the other party's pick
-  // We ONLY return a boolean, never the raw data
+  // Check for mutual match
   const isMutual = await checkAkinMatch(pickerId, pickedId, classId);
   if (isMutual) {
-    // Create a match record if not exists
+    // Instant reveal = picker had exactly 1 pick (this one) when match formed
+    const pickerInstantReveal = activePicks.length === 0; // was 0 before this pick = now 1
+    const theirPicks = await getActiveAkinPicks(pickedId, classId);
+    const pickedInstantReveal = theirPicks.length === 1; // they had 1 pick and it's us
+
     const [user1Id, user2Id] = [pickerId, pickedId].sort();
     const matchDocId = `akin_${user1Id}_${user2Id}_${classId}`;
     const matchRef = doc(db, "matches", matchDocId);
@@ -437,6 +455,8 @@ export async function setAkinPick(
           classId,
           createdAt: serverTimestamp(),
           isAkinMatch: true,
+          user1InstantReveal: isPickerUser1 ? pickerInstantReveal : pickedInstantReveal,
+          user2InstantReveal: isPickerUser1 ? pickedInstantReveal : pickerInstantReveal,
         });
       }
     }
@@ -445,53 +465,69 @@ export async function setAkinPick(
   return { success: true };
 }
 
-export async function getAkinPick(pickerId: string, classId: string): Promise<AkinPick | null> {
-  const pickDocId = `${pickerId}_${classId}`;
-  const snap = await getDoc(doc(db, "akin_picks", pickDocId));
-  if (!snap.exists()) return null;
-  return { pickId: snap.id, ...(snap.data() as Omit<AkinPick, "pickId">) };
-}
-
 /**
- * Check for mutual akin match.
+ * Check for mutual akin match — reads the other user's directed pick doc.
  * NEVER returns raw pick data — only boolean.
- * User A can check if B also picked A, but only gets true/false.
  */
 export async function checkAkinMatch(
   userId: string,
   otherUserId: string,
   classId: string
 ): Promise<boolean> {
-  const otherPickDocId = `${otherUserId}_${classId}`;
-  const otherSnap = await getDoc(doc(db, "akin_picks", otherPickDocId));
-  if (!otherSnap.exists()) return false;
-  const data = otherSnap.data();
-  return data.pickedId === userId;
+  const otherPickDocId = `${otherUserId}_${userId}_${classId}`;
+  const snap = await getDoc(doc(db, "akin_picks", otherPickDocId));
+  if (!snap.exists()) return false;
+  const expiresAt = snap.data().expiresAt as Timestamp | null;
+  if (expiresAt && expiresAt.toMillis() <= Date.now()) return false;
+  return true;
 }
 
-export function subscribeToAkinPick(
+/** Subscribe to all active picks for this user in this class (real-time). */
+export function subscribeToAkinPicks(
   pickerId: string,
   classId: string,
-  callback: (pick: AkinPick | null) => void
+  callback: (picks: AkinPick[]) => void
 ): Unsubscribe {
-  const pickDocId = `${pickerId}_${classId}`;
-  return onSnapshot(doc(db, "akin_picks", pickDocId), (snap) => {
-    if (!snap.exists()) {
-      callback(null);
-    } else {
-      callback({ pickId: snap.id, ...(snap.data() as Omit<AkinPick, "pickId">) });
-    }
+  const q = query(collection(db, "akin_picks"), where("pickerId", "==", pickerId));
+  return onSnapshot(q, (snap) => {
+    const now = Date.now();
+    const picks = snap.docs
+      .map(d => ({ pickId: d.id, ...(d.data() as Omit<AkinPick, "pickId">) }))
+      .filter(p => p.classId === classId && (!p.expiresAt || p.expiresAt.toMillis() > now));
+    callback(picks);
+  }, (err) => {
+    console.error("[subscribeToAkinPicks] snapshot error:", err);
   });
 }
 
-// ─── Profile Updates ─────────────────────────────────────────────────────────
+/** Release a specific pick. Applies 24h frost only if still within the 48h lock. */
+export async function releaseAkinPick(userId: string, pickedId: string, classId: string): Promise<void> {
+  const pickDocId = `${userId}_${pickedId}_${classId}`;
+  const pickRef = doc(db, "akin_picks", pickDocId);
+  const snap = await getDoc(pickRef);
+  const isStillLocked = snap.exists() &&
+    snap.data().expiresAt?.toMillis() > Date.now();
+
+  try { await deleteDoc(pickRef); } catch { /* non-critical */ }
+
+  const updates: Record<string, unknown> = { akinPickIds: arrayRemove(pickedId) };
+  if (isStillLocked) {
+    updates.refrostUntil = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+  }
+  await updateDoc(doc(db, "users", userId), updates);
+}
+
+// ─── Profile Updates (kept separate — not part of Akin Picks) ───────────────
 
 export async function updateUserProfile(
   userId: string,
   name: string,
-  avatarGradient: number
+  avatarGradient: number,
+  accentColor?: "orchid" | "mint" | "gold"
 ): Promise<void> {
-  await updateDoc(doc(db, "users", userId), { name: name.trim(), avatarGradient });
+  const updates: Record<string, unknown> = { name: name.trim(), avatarGradient };
+  if (accentColor !== undefined) updates.accentColor = accentColor;
+  await updateDoc(doc(db, "users", userId), updates);
 }
 
 export async function leaveClass(userId: string): Promise<void> {
@@ -514,21 +550,6 @@ export function formatRelativeTime(timestamp: Timestamp | null): string {
   return `${days}d ago`;
 }
 
-// ─── Refrost / Burning Bridge ────────────────────────────────────────────────
-
-export async function releaseAkinPick(userId: string, classId: string): Promise<void> {
-  const REFROST_MS = 24 * 60 * 60 * 1000;
-  const refrostUntil = Timestamp.fromMillis(Date.now() + REFROST_MS);
-  const pickDocId = `${userId}_${classId}`;
-  try {
-    await deleteDoc(doc(db, "akin_picks", pickDocId));
-  } catch { /* non-critical */ }
-  await updateDoc(doc(db, "users", userId), {
-    akinPickId: null,
-    akinPickedAt: null,
-    refrostUntil,
-  });
-}
 
 export function subscribeToUserDoc(
   userId: string,
@@ -550,15 +571,16 @@ export function getMatchTierProgress(createdAt: Timestamp | null): {
   msToNext: number;
   ageMs: number;
 } {
-  if (!createdAt) return { tier: "echo", progressToNext: 0, msToNext: 86400000, ageMs: 0 };
+  if (!createdAt) return { tier: "echo", progressToNext: 0, msToNext: 57_600_000, ageMs: 0 };
   const ageMs = Date.now() - createdAt.toMillis();
-  const h24 = 86400000;
-  const h48 = 172800000;
-  const h72 = 259200000;
-  if (ageMs >= h72) return { tier: "bond", progressToNext: 1, msToNext: 0, ageMs };
-  if (ageMs >= h48) return { tier: "identification", progressToNext: (ageMs - h48) / (h72 - h48), msToNext: h72 - ageMs, ageMs };
-  if (ageMs >= h24) return { tier: "recognition", progressToNext: (ageMs - h24) / (h48 - h24), msToNext: h48 - ageMs, ageMs };
-  return { tier: "echo", progressToNext: ageMs / h24, msToNext: h24 - ageMs, ageMs };
+  // 48h total reveal: 0-16h echo, 16-32h recognition, 32-48h identification, 48h+ bond
+  const h16 = 57_600_000;
+  const h32 = 115_200_000;
+  const h48 = 172_800_000;
+  if (ageMs >= h48) return { tier: "bond", progressToNext: 1, msToNext: 0, ageMs };
+  if (ageMs >= h32) return { tier: "identification", progressToNext: (ageMs - h32) / (h48 - h32), msToNext: h48 - ageMs, ageMs };
+  if (ageMs >= h16) return { tier: "recognition", progressToNext: (ageMs - h16) / (h32 - h16), msToNext: h32 - ageMs, ageMs };
+  return { tier: "echo", progressToNext: ageMs / h16, msToNext: h16 - ageMs, ageMs };
 }
 
 export async function updateSharedSecret(userId: string, secret: string): Promise<void> {
@@ -622,12 +644,7 @@ export async function addToUserHistory(
 ): Promise<void> {
   const docId = `${userId}_${classId}`;
   const ref = doc(db, "user_history", docId);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    await updateDoc(ref, { skippedIds: arrayUnion(skippedUserId) });
-  } else {
-    await setDoc(ref, { userId, classId, skippedIds: [skippedUserId] });
-  }
+  await setDoc(ref, { userId, classId, skippedIds: arrayUnion(skippedUserId) }, { merge: true });
 }
 
 export async function getUserHistory(userId: string, classId: string): Promise<string[]> {
